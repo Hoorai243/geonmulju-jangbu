@@ -35,7 +35,11 @@
       function show(msg) {
         var el = document.getElementById('app');
         if (!el || el.childElementCount > 0) return; // 이미 화면이 그려졌으면 건드리지 않음
-        el.innerHTML = '<div style="padding:20px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:#8a1c1c;font-family:monospace">[앱 오류]\n' + String(msg) + '</div>';
+        el.textContent = '';
+        var box = document.createElement('div');
+        box.setAttribute('style', 'padding:20px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:#8a1c1c;font-family:monospace');
+        box.textContent = '[앱 오류]\n' + String(msg); // innerHTML 안 씀(오류 문구에 HTML 있어도 안전)
+        el.appendChild(box);
       }
       window.addEventListener('error', function (e) {
         show((e.message || e.type) + '\n' + (e.filename || '') + ' : ' + (e.lineno || '') + '\n' + ((e.error && e.error.stack) || ''));
