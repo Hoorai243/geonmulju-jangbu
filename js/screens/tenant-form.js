@@ -47,6 +47,11 @@ export async function renderTenantForm({ params }) {
 
   const suffixWon = (input) => h('div', { class: 'input-suffix' }, input, h('span', { class: 'suffix' }, '원'));
 
+  // 수도세를 관리비와 다른 주기(예: 관리비 매월·수도세 격월)로 받을 때만 쓰는 옵션.
+  // 지금은 모든 세입자가 수도세를 관리비에 합쳐 받아서 화면에서 숨김.
+  // 다시 필요하면 이 값을 true 로 바꾸면 등록 화면에 스위치가 돌아옴. (저장 로직·데이터는 그대로 유지)
+  const SHOW_WATER_SEPARATE = false;
+
   // ----- 수도세 따로 받기 (매월/격월) -----
   const wc = t ? store.waterConfig(t, baseFrom) : { amount: 0, cycle: 'none', parity: 'odd' };
   let waterCycle = wc.cycle === 'none' ? 'monthly' : wc.cycle; // 켰을 때 기본 매월
@@ -154,8 +159,8 @@ export async function renderTenantForm({ params }) {
       field('계약 시작월', contractStart),
       field('계약 만료월', contractEnd, '선택'),
       field('납기일', dueDay, null, '이 날짜에서 3일이 지나도록 입금이 없으면 “미납(빨강)”으로 표시돼요.'),
-      // 수도세 따로 받기
-      h('div', { class: 'card' },
+      // 수도세 따로 받기 (기본 숨김. 이미 수도세가 켜진 세입자만 계속 보여 끌 수 있게 함)
+      (SHOW_WATER_SEPARATE || wc.cycle !== 'none') && h('div', { class: 'card' },
         h('div', { class: 'settingrow', style: { padding: 0 } },
           h('div', { class: 'settingrow__main' },
             h('div', { class: 'settingrow__title' }, '수도세 따로 받기'),

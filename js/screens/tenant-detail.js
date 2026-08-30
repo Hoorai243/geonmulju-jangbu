@@ -139,6 +139,9 @@ function openRateChange(t, refresh) {
   const from = h('input', { class: 'input', type: 'month', value: monthKey() });
   const cur = store.ratesForMonth(t, monthKey());
   const wc = store.waterConfig(t, monthKey());
+  // 수도세를 관리비와 다른 주기로 받는 세입자만 쓰는 옵션. 지금은 화면에서 숨김.
+  // 이미 수도세가 켜진 세입자라면 끌 수 있게 계속 보여줌.
+  const showWater = wc.cycle !== 'none';
   const rent = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.rent ? cur.rent.toLocaleString('ko-KR') : '' }));
   const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.fee ? cur.fee.toLocaleString('ko-KR') : '' }));
 
@@ -188,7 +191,7 @@ function openRateChange(t, refresh) {
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 관리비'), h('div', { class: 'input-suffix' }, fee, h('span', { class: 'suffix' }, '원'))),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '관리비 주기'), h('div', { class: 'choice' }, fM, fB)),
       feeParityField,
-      h('div', { class: 'card' },
+      showWater && h('div', { class: 'card' },
         h('div', { class: 'settingrow', style: { padding: 0 } },
           h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '수도세 따로 받기')),
           waterSwitch),
