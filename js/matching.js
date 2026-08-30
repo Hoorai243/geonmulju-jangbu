@@ -2,6 +2,7 @@
 // 사람 이름은 짧아서 "포함/유사도"를 함께 본다.
 
 function norm(s) { return String(s || '').replace(/\s+/g, '').toLowerCase(); }
+export const normalizeName = norm;
 
 // 편집거리(레벤슈타인)
 function lev(a, b) {

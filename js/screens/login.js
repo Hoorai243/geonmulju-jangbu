@@ -1,4 +1,4 @@
-// 로그인 화면 — 지문/생체 먼저, 아니면 백업 비밀번호.
+// 로그인 — 열면 바로 지문·생체 시도, 아래 "비밀번호로 입력"으로 전환.
 import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { screen } from '../ui/shell.js';
@@ -13,16 +13,26 @@ export async function renderLogin() {
   const err = h('div', { class: 'banner banner--bad', style: { display: 'none' } }, icon('alert'), h('div', {}, '비밀번호가 맞지 않아요. 다시 입력해 주세요.'));
 
   const doPassword = async () => {
-    const ok = await auth.verifyPassword(pw.value);
-    if (ok) { auth.unlock(); navigate('/', { replace: true }); }
+    if (await auth.verifyPassword(pw.value)) { auth.unlock(); navigate('/', { replace: true }); }
     else { err.style.display = 'flex'; pw.value = ''; pw.focus(); }
   };
-  const doBio = async () => {
+  pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doPassword(); });
+
+  const doBio = async (auto) => {
     try { await auth.loginBiometric(); navigate('/', { replace: true }); }
-    catch (e) { toast(e.message || '생체 확인에 실패했어요.', 'bad'); }
+    catch (e) { if (!auto) toast(e.message || '지문·생체 확인에 실패했어요.', 'bad'); }
   };
 
-  pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doPassword(); });
+  // 비밀번호 영역: 생체가 있으면 처음엔 숨김
+  const pwSection = h('div', { class: 'stack', style: { display: bioOk ? 'none' : 'block' } },
+    h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', { class: 'label' }, '비밀번호'), pw),
+    err,
+    h('button', { class: 'btn btn--secondary btn--lg', onClick: doPassword }, icon('lock'), '비밀번호로 열기'),
+  );
+  const showPw = () => { pwSection.style.display = 'block'; setTimeout(() => pw.focus(), 50); };
+
+  // 열면 바로 생체 시도(자동). 브라우저가 막으면 조용히 버튼만 남김.
+  if (bioOk) setTimeout(() => doBio(true), 350);
 
   return screen({ plain: true },
     h('div', { class: 'brand' },
@@ -31,14 +41,9 @@ export async function renderLogin() {
       h('div', { class: 'brand__tag' }, '오늘도 편안하게 확인하세요'),
     ),
     h('div', { class: 'stack' },
-      bioOk && h('button', { class: 'btn btn--primary btn--lg', onClick: doBio }, icon('fingerprint'), '지문·생체로 열기'),
-      bioOk && h('div', { class: 'center muted', style: { margin: '8px 0' } }, '또는'),
-      h('div', { class: 'field', style: { marginBottom: '0' } },
-        !bioOk && h('label', { class: 'label' }, '비밀번호'),
-        pw,
-      ),
-      err,
-      h('button', { class: 'btn btn--secondary btn--lg', onClick: doPassword }, icon('lock'), '비밀번호로 열기'),
+      bioOk && h('button', { class: 'btn btn--primary btn--lg', onClick: () => doBio(false) }, icon('fingerprint'), '지문·생체로 열기'),
+      bioOk && h('button', { class: 'btn btn--ghost', onClick: showPw }, icon('lock'), '비밀번호로 입력'),
+      pwSection,
     ),
   );
 }

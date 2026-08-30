@@ -192,6 +192,14 @@ export async function updatePayment(id, patch) {
 }
 export async function deletePayment(id) { return db.del('payment_log', id); }
 
+// 입금자명 매칭 규칙(기억): 별칭(이름→세입자)과 제외 목록. 은행파일 정리를 빠르게.
+export async function getMatchRules(buildingId) {
+  return (await db.metaGet('matchRules:' + buildingId)) || { aliases: {}, ignores: [] };
+}
+export async function saveMatchRules(buildingId, rules) {
+  await db.metaSet('matchRules:' + buildingId, rules);
+}
+
 export async function getAllPaymentsForBuilding(buildingId) {
   const all = await db.getAll('payment_log');
   return all.filter((p) => p.buildingId === buildingId);

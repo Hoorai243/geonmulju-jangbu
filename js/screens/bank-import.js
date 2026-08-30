@@ -63,44 +63,67 @@ export async function renderBankImport() {
     if (!tenants.length) { result.appendChild(banner('info', { text: '먼저 세입자를 등록해 주세요.' })); return; }
     const existing = await store.getAllPaymentsForBuilding(buildingId);
     const isDup = (t) => existing.some((p) => p.paidAt === t.date && p.amount === t.amount && norm(p.depositorName) === norm(t.name));
+    const rules = await store.getMatchRules(buildingId);
 
-    const items = txns.map((t) => {
-      const dup = isDup(t);
-      const { suggestion } = matchDepositor(t.name, tenants);
-      return { t, dup, tenantId: dup ? '' : (suggestion ? suggestion.tenant.id : ''), state: dup ? 'dup' : (suggestion ? 'auto' : 'need') };
-    });
+    // 입금자명으로 묶기 (같은 이름은 한 덩어리)
+    const map = new Map();
+    for (const t of txns) {
+      const key = norm(t.name) || '__빈칸__';
+      if (!map.has(key)) map.set(key, { key, display: t.name || '(입금자명 없음)', live: [], dup: [] });
+      (isDup(t) ? map.get(key).dup : map.get(key).live).push(t);
+    }
+    const groups = [...map.values()];
+    // 초기 결정: 기억한 별칭 → 제외 목록 → 느슨한 매칭
+    for (const g of groups) {
+      let d = '';
+      if (rules.aliases[g.key] && tenants.find((t) => t.id === rules.aliases[g.key])) d = rules.aliases[g.key];
+      else if (rules.ignores.includes(g.key)) d = 'ignore';
+      else { const { suggestion } = matchDepositor(g.display, tenants); if (suggestion) d = suggestion.tenant.id; }
+      g.decision = d;
+      g.sum = [...g.live, ...g.dup].reduce((s, x) => s + x.amount, 0);
+    }
+    const rank = (g) => (g.live.length === 0 ? 3 : g.decision === '' ? 0 : g.decision === 'ignore' ? 2 : 1);
+    groups.sort((a, b) => rank(a) - rank(b) || b.sum - a.sum);
 
-    const order = { need: 0, auto: 1, dup: 2 };
-    items.sort((a, b) => order[a.state] - order[b.state] || (a.t.date < b.t.date ? -1 : 1));
+    const dupTotal = txns.filter((t) => isDup(t)).length;
 
-    const counts = { need: items.filter((i) => i.state === 'need').length, auto: items.filter((i) => i.state === 'auto').length, dup: items.filter((i) => i.state === 'dup').length };
-
-    const saveBtn = h('button', { class: 'btn btn--primary btn--lg' }, icon('check'), '선택한 입금 저장');
+    const saveBtn = h('button', { class: 'btn btn--primary btn--lg' });
     const updateSave = () => {
-      const n = items.filter((i) => i.tenantId).length;
-      saveBtn.textContent = '';
-      saveBtn.append(icon('check'), document.createTextNode(` 선택한 입금 ${n}건 저장`));
+      let n = 0; for (const g of groups) if (g.decision && g.decision !== 'ignore') n += g.live.length;
+      clear(saveBtn).append(icon('check'), document.createTextNode(` 선택한 입금 ${n}건 저장`));
       saveBtn.disabled = n === 0;
     };
     saveBtn.onclick = async () => {
-      const chosen = items.filter((i) => i.tenantId);
-      for (const it of chosen) {
-        await store.addPayment({ buildingId, tenantId: it.tenantId, month: it.t.date.slice(0, 7), amount: it.t.amount, depositorName: it.t.name, paidAt: it.t.date, source: 'bank', note: '은행파일(국민)' });
+      const rules2 = await store.getMatchRules(buildingId);
+      let saved = 0;
+      for (const g of groups) {
+        if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
+        else if (g.decision) {
+          rules2.aliases[g.key] = g.decision; // 다음에도 기억
+          for (const t of g.live) { await store.addPayment({ buildingId, tenantId: g.decision, month: t.date.slice(0, 7), amount: t.amount, depositorName: t.name, paidAt: t.date, source: 'bank', note: '은행파일' }); saved++; }
+        }
       }
-      toast(`${chosen.length}건을 저장했어요`, 'ok');
+      await store.saveMatchRules(buildingId, rules2);
+      toast(`${saved}건을 저장했어요`, 'ok');
       navigate('/');
     };
 
-    const rowEl = (it) => {
-      const sel = h('select', { class: 'select', style: { minHeight: '48px', fontSize: 'var(--fs-body)' }, disabled: it.dup },
-        h('option', { value: '' }, it.dup ? '이미 있음' : '건너뛰기'),
-        ...tenants.map((tn) => h('option', { value: tn.id, selected: it.tenantId === tn.id }, `${tn.unit}호 ${tn.name}`)));
-      sel.onchange = () => { it.tenantId = sel.value; updateSave(); };
-      return h('div', { class: 'card', style: it.dup ? { opacity: '.55' } : {} },
+    const groupEl = (g) => {
+      const onlyDup = g.live.length === 0;
+      const sel = h('select', { class: 'select', style: { minHeight: '52px', fontSize: 'var(--fs-body)' }, disabled: onlyDup },
+        h('option', { value: '', selected: g.decision === '' }, onlyDup ? '이미 있음 (모두)' : '건너뛰기 (이번만)'),
+        h('option', { value: 'ignore', selected: g.decision === 'ignore' }, '제외 (앞으로 계속)'),
+        ...tenants.map((tn) => h('option', { value: tn.id, selected: g.decision === tn.id }, `${tn.unit}호 ${tn.name}`)));
+      sel.onchange = () => { g.decision = sel.value; updateSave(); };
+      const badge = onlyDup ? h('span', { class: 'chip chip--idle' }, '이미 있음')
+        : g.decision && g.decision !== 'ignore' ? h('span', { class: 'chip chip--ok' }, '연결됨')
+          : g.decision === 'ignore' ? h('span', { class: 'chip chip--idle' }, '제외')
+            : h('span', { class: 'chip chip--warn' }, '확인 필요');
+      return h('div', { class: 'card', style: onlyDup ? { opacity: '.6' } : {} },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' } },
-          h('div', { style: { fontWeight: 700 } }, it.t.name || '(입금자명 없음)'),
-          h('div', { class: 'amount won', style: { fontWeight: 800 } }, won(it.t.amount))),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', margin: '2px 0 10px' } }, it.t.date),
+          h('div', { style: { fontWeight: 700 } }, g.display), badge),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', margin: '2px 0 10px' } },
+          `${g.live.length + g.dup.length}건 · 합계 ${won(g.sum)}원` + (g.dup.length ? ` (이미 ${g.dup.length}건 저장됨)` : '')),
         sel,
       );
     };
@@ -108,13 +131,11 @@ export async function renderBankImport() {
     clear(result);
     result.append(
       h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
-        h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, `입금 ${txns.length}건을 찾았어요`),
-        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-          counts.auto > 0 && h('span', { class: 'chip chip--ok' }, `자동 매칭 ${counts.auto}`),
-          counts.need > 0 && h('span', { class: 'chip chip--warn' }, `확인 필요 ${counts.need}`),
-          counts.dup > 0 && h('span', { class: 'chip chip--idle' }, `이미 있음 ${counts.dup}`))),
-      banner('info', { text: '자동으로 맞춰둔 건 그대로 두고, “확인 필요”만 골라주면 돼요. 아닌 건 “건너뛰기”.' }),
-      h('div', { class: 'stack', style: { marginTop: '12px' } }, ...items.map(rowEl)),
+        h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, `입금 ${txns.length}건 · 입금자 ${groups.length}명`),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, '같은 이름은 한 번만 정하면 그 이름 전부에 적용돼요. 한 번 정한 이름은 다음에도 자동으로 기억해요.')),
+      banner('info', { text: '“확인 필요”만 골라주면 돼요. 세입자 이름과 달라도 이 세입자로 지정하면 다음부터 자동 연결돼요. 필요 없는 입금은 “제외”.' }),
+      dupTotal > 0 && h('div', { class: 'muted center', style: { fontSize: 'var(--fs-sm)' } }, `이미 저장된 ${dupTotal}건은 자동으로 건너뛰어요.`),
+      h('div', { class: 'stack', style: { marginTop: '12px' } }, ...groups.map(groupEl)),
       h('div', { style: { position: 'sticky', bottom: '0', padding: '12px 0', background: 'linear-gradient(transparent, var(--paper) 30%)' } }, saveBtn),
     );
     updateSave();
