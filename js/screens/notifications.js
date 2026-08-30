@@ -37,6 +37,15 @@ export async function renderNotifications() {
 
       alerts.total === 0 && emptyState({ art: 'check', title: '다 챙기셨어요!', desc: '지금은 알림이 없어요.' }),
 
+      alerts.bankReminder && alerts.bankReminder.show && h('div', { class: 'card' },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+          h('span', { class: 'chip chip--warn' }, icon('download', { size: 16 }), '월말 정리'),
+          h('div', { class: 'rowcard__main' },
+            h('div', { class: 'rowcard__title' }, '은행 파일 받아 정리할 때'),
+            h('div', { class: 'rowcard__meta' }, `아직 확인 안 된 세입자 ${alerts.bankReminder.pending}명`))),
+        h('button', { class: 'btn btn--primary btn--block mt-4', onClick: () => navigate('/bank-import') }, icon('download'), '은행 파일로 정리'),
+      ),
+
       alerts.unpaid.length > 0 && h('div', {},
         h('div', { class: 'section-title' }, `미납 ${alerts.unpaid.length}건`),
         h('div', { class: 'stack' }, ...alerts.unpaid.map((a) => h('div', { class: 'card' },

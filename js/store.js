@@ -370,9 +370,13 @@ export function depositSummary(ledger) {
 
 /* ================= 알림 설정 ================= */
 export async function getNotifyDefaults() {
-  return (await db.metaGet('notifyDefaults')) || { enabled: true, unpaid: true, expiry: true, daysBefore: 30 };
+  return { enabled: true, unpaid: true, expiry: true, daysBefore: 30, bankReminder: true, bankReminderDay: 25, ...(await db.metaGet('notifyDefaults')) };
 }
 export async function setNotifyDefaults(v) { await db.metaSet('notifyDefaults', v); }
+
+// 월말 정리 알림 "이번 달 안 보기" 기억 (값은 'YYYY-MM')
+export async function getBankReminderDismissed() { return await db.metaGet('bankReminderDismissed'); }
+export async function dismissBankReminder(month) { await db.metaSet('bankReminderDismissed', month); }
 
 // 세입자별 유효 알림 여부(개별 설정이 전체값을 덮어씀)
 export function effectiveNotify(tenant, defaults) {

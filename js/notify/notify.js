@@ -39,13 +39,15 @@ export async function computeAlerts(buildingId, today = monthKey()) {
   const defaults = await store.getNotifyDefaults();
   const unpaid = [];
   const expiring = [];
+  let pending = 0; // 이번 달 아직 완납 아닌 세입자 수
 
   for (const t of tenants) {
     const on = store.effectiveNotify(t, defaults);
+    const led = await store.tenantLedger(t, today);   // 선납 이월 반영
+    const st = led.map.get(today);
+    if (st && st.state !== 'ok') pending++;
     // 미납(이번 달) — 납기일+3 지났는데 완납 아님
     if (defaults.unpaid && on) {
-      const led = await store.tenantLedger(t, today);   // 선납 이월 반영
-      const st = led.map.get(today);
       if (st && (st.state === 'bad' || (st.state === 'part' && store.isOverdue(t, today)))) {
         unpaid.push({ tenant: t, month: today, remaining: st.remaining, state: st.state });
       }
@@ -59,7 +61,21 @@ export async function computeAlerts(buildingId, today = monthKey()) {
       }
     }
   }
-  return { unpaid, expiring, total: unpaid.length + expiring.length };
+
+  // 월말 정리 알림 — 실제 이번 달을 보고 있고, 월말(기본 25일)이며, 아직 정리할 입금이 남았을 때
+  const now = new Date();
+  const isCurrentMonth = today === monthKey();
+  const dismissed = await store.getBankReminderDismissed();
+  const bankReminder = {
+    show: !!defaults.enabled && defaults.bankReminder !== false && isCurrentMonth
+      && now.getDate() >= (defaults.bankReminderDay || 25)
+      && tenants.length > 0 && pending > 0
+      && dismissed !== today,
+    pending,
+    month: today,
+  };
+
+  return { unpaid, expiring, bankReminder, total: unpaid.length + expiring.length + (bankReminder.show ? 1 : 0) };
 }
 
 function monthsUntil(fromKey, toKey) {

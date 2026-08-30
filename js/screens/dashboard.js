@@ -45,6 +45,16 @@ export async function renderDashboard({ query } = { query: {} }) {
     topbar({ title: '이번 달 현황', sub: building?.name, right: bell }),
     monthNav,
 
+    // 월말 정리 알림 — 은행 파일 받아 정리하라는 안내(닫을 수 있음)
+    alerts.bankReminder && alerts.bankReminder.show && h('div', {},
+      h('div', { class: 'banner banner--warn' }, icon('download'),
+        h('div', {}, h('strong', {}, '이번 달 정리할 때예요. '),
+          `아직 확인 안 된 세입자가 ${alerts.bankReminder.pending}명 있어요. 은행 앱에서 거래내역 파일을 받아 입금을 정리하세요.`)),
+      h('div', { class: 'btn-row', style: { marginTop: '8px' } },
+        h('button', { class: 'btn btn--primary', onClick: () => navigate('/bank-import') }, icon('download'), '은행 파일로 정리'),
+        h('button', { class: 'btn btn--ghost', onClick: async () => { await store.dismissBankReminder(month); toast('이번 달은 안 보여드릴게요.', 'ok'); refresh(); } }, '이번 달 안 보기')),
+    ),
+
     // 요약
     tenants.length > 0 && summaryCard(tenants.length, counts),
 

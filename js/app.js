@@ -3,6 +3,7 @@ import { openDB } from './db.js';
 import { route, setNotFound, setBeforeEach, startRouter, navigate } from './router.js';
 import * as auth from './auth/auth.js';
 import * as store from './store.js';
+import { isNative, ensureMonthEndReminder, cancelMonthEndReminder, wireNotificationTap } from './notify/native.js';
 
 import { renderOnboarding } from './screens/onboarding.js';
 import { renderLogin } from './screens/login.js';
@@ -23,9 +24,17 @@ import { renderHelp } from './screens/help.js';
 async function boot() {
   await openDB();
 
-  // 서비스워커(오프라인) — 보안 컨텍스트에서만
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  // 서비스워커(오프라인) — 보안 컨텍스트에서만. 네이티브 앱에선 필요 없어 건너뜀.
+  if (!isNative() && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW 등록 실패', e));
+  }
+
+  // 네이티브(안드로이드 앱): 월말 정리 알림을 설정에 맞춰 예약/해제 + 알림 탭 연결
+  if (isNative()) {
+    wireNotificationTap(navigate);
+    const nd = await store.getNotifyDefaults();
+    if (nd.enabled && nd.bankReminder !== false) ensureMonthEndReminder({ day: nd.bankReminderDay || 25 });
+    else cancelMonthEndReminder();
   }
 
   // 로그인 관문

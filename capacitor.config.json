@@ -1,0 +1,10 @@
+{
+  "appId": "com.hoorai.jangbu",
+  "appName": "건물주 장부",
+  "webDir": "www",
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#18364D"
+    }
+  }
+}
