@@ -6,7 +6,7 @@ import * as store from '../store.js';
 import { computeAlerts } from '../notify/notify.js';
 import { navigate } from '../router.js';
 import { openNameMatch, openConfirmForTenant } from './pay-flow.js';
-import { coachMark } from '../ui/coach.js';
+import { runCoachQueue } from '../ui/coach.js';
 
 export async function renderDashboard({ query } = { query: {} }) {
   const buildingId = await store.getCurrentBuildingId();
@@ -72,7 +72,7 @@ export async function renderDashboard({ query } = { query: {} }) {
     // 미확인 입금
     unmatched.length > 0 && h('div', {},
       h('div', { class: 'section-title' }, `미확인 입금 ${unmatched.length}건`),
-      h('div', { class: 'stack' }, ...unmatched.map((p) => unmatchedCard(p, tenants, refresh))),
+      h('div', { class: 'stack' }, ...unmatched.map((p, i) => unmatchedCard(p, tenants, refresh, i === 0))),
     ),
 
     // 세입자 상태 목록
@@ -86,13 +86,20 @@ export async function renderDashboard({ query } = { query: {} }) {
 
   if (tenants.length > 0) {
     setTimeout(() => {
-      const el = document.getElementById('coach-paycheck');
-      if (el) coachMark({
-        target: el,
-        seenKey: 'paycheck',
-        title: '여기서 입금을 확인해요',
-        text: '이 네모를 누르면 이번 달 입금이 완납(초록)으로 바뀌어요. 잘못 눌렀으면 색칠된 네모를 다시 눌러 입금 내역을 열고, 거기서 휴지통을 누르면 되돌려져요.',
-      });
+      runCoachQueue([
+        {
+          target: 'coach-paycheck', seenKey: 'paycheck', title: '여기서 입금을 확인해요',
+          text: '이 네모를 누르면 이번 달 입금이 완납(초록)으로 바뀌어요. 잘못 눌렀으면 색칠된 네모를 다시 눌러 입금 내역을 열고, 거기서 휴지통을 누르면 되돌려져요.',
+        },
+        {
+          target: 'coach-status', seenKey: 'statusColors', title: '색과 숫자 뜻',
+          text: '초록=완납, 빨강=미납, 노랑=부분납부/미확인이에요. 세입자 줄의 “밀림”은 아직 안 낸 쌓인 금액, “선납”은 미리 더 낸 금액이에요.',
+        },
+        {
+          target: 'coach-unmatched', seenKey: 'unmatched', title: '누구 입금인지 정해요',
+          text: '은행 파일에서 이름을 자동으로 못 붙인 입금이에요. 이 칸을 누르면 세입자를 고를 수 있고, 고르면 그 사람 입금으로 처리돼요.',
+        },
+      ]);
     }, 500);
   }
 
@@ -101,7 +108,7 @@ export async function renderDashboard({ query } = { query: {} }) {
 
 function summaryCard(total, c) {
   const paidPct = total ? Math.round((c.ok / total) * 100) : 0;
-  return h('div', { class: 'card' },
+  return h('div', { class: 'card', id: 'coach-status' },
     h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' } },
       h('div', { style: { fontSize: 'var(--fs-lg)', fontWeight: 700 } }, `전체 ${total}명 중 `, h('span', { style: { color: 'var(--ok-ink)' } }, `완납 ${c.ok}명`)),
       h('div', { class: 'muted' }, `${paidPct}%`),
@@ -183,7 +190,7 @@ function openPaidSheet({ tenant, month, pays, refresh }) {
   });
 }
 
-function unmatchedCard(p, tenants, refresh) {
+function unmatchedCard(p, tenants, refresh, isFirst) {
   const assign = () => openSheet({
     title: '이 입금은 누구인가요?',
     desc: `입금자명: ${p.depositorName || '(없음)'} · ${won(p.amount)}원`,
@@ -205,7 +212,7 @@ function unmatchedCard(p, tenants, refresh) {
       );
     },
   });
-  return h('button', { class: 'rowcard', style: { borderColor: 'var(--warn-solid)' }, onClick: assign },
+  return h('button', { class: 'rowcard', id: isFirst ? 'coach-unmatched' : null, style: { borderColor: 'var(--warn-solid)' }, onClick: assign },
     h('div', { style: { width: '40px', height: '40px', flex: 'none', borderRadius: '10px', background: 'var(--warn-bg)', color: 'var(--warn-ink)', display: 'grid', placeItems: 'center' } }, icon('receipt')),
     h('div', { class: 'rowcard__main' },
       h('div', { class: 'rowcard__title' }, p.depositorName || '입금자 미상'),

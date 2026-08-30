@@ -7,6 +7,7 @@ import { navigate } from '../router.js';
 import { openConfirmForTenant } from './pay-flow.js';
 import { exportTenantExcel, exportTenantImage } from '../export/export.js';
 import { requireAuth } from '../ui/authgate.js';
+import { coachMark } from '../ui/coach.js';
 
 export async function renderTenantDetail({ params }) {
   const t = await store.getTenant(params.id);
@@ -186,7 +187,7 @@ function openRateChange(t, refresh) {
   openSheet({
     title: '요금 변경', desc: '언제부터 얼마로 바꿀지 정해요.',
     body: (close) => h('div', { class: 'stack' },
-      h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '적용 시작월'), from),
+      h('div', { class: 'field', id: 'coach-rate', style: { margin: 0 } }, h('label', { class: 'label' }, '적용 시작월'), from),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 월세'), h('div', { class: 'input-suffix' }, rent, h('span', { class: 'suffix' }, '원'))),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 관리비'), h('div', { class: 'input-suffix' }, fee, h('span', { class: 'suffix' }, '원'))),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '관리비 주기'), h('div', { class: 'choice' }, fM, fB)),
@@ -208,6 +209,10 @@ function openRateChange(t, refresh) {
       }, '저장'),
     ),
   });
+  setTimeout(() => coachMark({
+    target: 'coach-rate', seenKey: 'rateChange', title: '언제부터 바뀌는지가 중요해요',
+    text: '여기서 정한 “적용 시작월”부터 새 요금이 적용돼요. 바꾸기 전에 밀린 달은 예전 금액 그대로 남으니 안심하세요.',
+  }), 350);
 }
 
 function notifyBox(t, defaults, refresh) {

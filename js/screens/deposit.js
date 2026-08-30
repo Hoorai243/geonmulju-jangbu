@@ -4,6 +4,7 @@ import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
 import { navigate } from '../router.js';
+import { coachMark } from '../ui/coach.js';
 
 /* ---------- 목록 ---------- */
 export async function renderDepositList() {
@@ -54,6 +55,11 @@ export async function renderDepositDetail({ params }) {
     refund: { label: '환불', cls: 'info', sign: '−', color: 'var(--primary-press)', icon: 'refund' },
   };
 
+  setTimeout(() => coachMark({
+    target: 'coach-deposit', seenKey: 'deposit', title: '보증금은 기록으로 남겨요',
+    text: '보증금은 금액 하나가 아니라, 입금·차감·환불을 각각 기록해요. 이 버튼들로 기록해두면 퇴거할 때 돌려줄 금액이 자동으로 계산돼요.',
+  }), 450);
+
   return screen({ plain: true },
     topbar({ title: `${t.unit}호 보증금`, sub: t.name, back: '/deposit' }),
     h('div', { class: 'stack-lg' },
@@ -87,7 +93,7 @@ export async function renderDepositDetail({ params }) {
       ),
 
       // 이벤트 추가 버튼
-      h('div', { class: 'btn-row' },
+      h('div', { class: 'btn-row', id: 'coach-deposit' },
         h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'in', refresh, null, accounts) }, icon('plus'), '입금'),
         h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'deduct', refresh, null, accounts) }, icon('minus'), '차감'),
         h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'refund', refresh, null, accounts) }, icon('refund'), '환불'),
