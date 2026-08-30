@@ -43,6 +43,8 @@ export async function renderDepositDetail({ params }) {
   if (!t) { navigate('/deposit', { replace: true }); return h('div'); }
   const led = await store.getLedger(t.id);
   const s = store.depositSummary(led);
+  const accounts = await store.getAccounts(t.buildingId);
+  const acctName = (id) => { const a = accounts.find((x) => x.id === id); return a ? (a.bankName + (a.alias ? ' · ' + a.alias : '')) : ''; };
   const refresh = () => navigate('/deposit/' + t.id, { replace: true });
   const movedout = t.status === 'movedout';
 
@@ -81,14 +83,14 @@ export async function renderDepositDetail({ params }) {
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
           h('strong', {}, '돌려줄 금액'),
           h('strong', { class: 'amount won amount--big', style: { color: 'var(--primary)' } }, won(s.refundable))),
-        s.refundable > s.refunded && h('button', { class: 'btn btn--primary btn--block mt-4', onClick: () => openEvent(t, 'refund', refresh, s.refundable - s.refunded) }, icon('refund'), `${won(s.refundable - s.refunded)}원 환불 기록`),
+        s.refundable > s.refunded && h('button', { class: 'btn btn--primary btn--block mt-4', onClick: () => openEvent(t, 'refund', refresh, s.refundable - s.refunded, accounts) }, icon('refund'), `${won(s.refundable - s.refunded)}원 환불 기록`),
       ),
 
       // 이벤트 추가 버튼
       h('div', { class: 'btn-row' },
-        h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'in', refresh) }, icon('plus'), '입금'),
-        h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'deduct', refresh) }, icon('minus'), '차감'),
-        h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'refund', refresh) }, icon('refund'), '환불'),
+        h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'in', refresh, null, accounts) }, icon('plus'), '입금'),
+        h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'deduct', refresh, null, accounts) }, icon('minus'), '차감'),
+        h('button', { class: 'btn btn--secondary', onClick: () => openEvent(t, 'refund', refresh, null, accounts) }, icon('refund'), '환불'),
       ),
 
       // 이벤트 내역
@@ -102,7 +104,7 @@ export async function renderDepositDetail({ params }) {
               h('span', { class: `chip chip--${ti.cls}` }, ti.label),
               h('div', { class: 'rowcard__main' },
                 h('div', { style: { color: ti.color, fontWeight: 800, fontSize: 'var(--fs-lg)' } }, `${ti.sign} ${won(l.amount)}원`),
-                h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${formatDate(l.date)}${l.category ? ' · ' + l.category : ''}${l.memo ? ' · ' + l.memo : ''}`)),
+                h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${formatDate(l.date)}${l.category ? ' · ' + l.category : ''}${l.accountId ? ' · ' + acctName(l.accountId) : ''}${l.memo ? ' · ' + l.memo : ''}`)),
               h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: async () => { await store.deleteLedger(l.id); toast('삭제했어요'); refresh(); } }, icon('trash')),
             );
           })),
@@ -116,10 +118,19 @@ const dt = (x) => h('dt', {}, x);
 const dd = (x) => h('dd', {}, x);
 
 // 보증금 이벤트 추가 시트
-function openEvent(t, type, refresh, prefill) {
+function openEvent(t, type, refresh, prefill, accounts = []) {
   const titles = { in: '보증금 입금 기록', deduct: '보증금 차감 기록', refund: '보증금 환불 기록' };
   const amount = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: prefill ? prefill.toLocaleString('ko-KR') : '', placeholder: '0' }));
   const date = h('input', { class: 'input', type: 'date', value: todayISO() });
+  // 받은/보낸 계좌 (입금·환불만, 계좌가 있을 때)
+  let accountId = '';
+  const acctWrap = h('div');
+  if ((type === 'in' || type === 'refund') && accounts.length) {
+    const sel = h('select', { class: 'select' }, h('option', { value: '' }, '계좌 선택 안 함'),
+      ...accounts.map((a) => h('option', { value: a.id }, `${a.bankName}${a.alias ? ' · ' + a.alias : ''}`)));
+    sel.onchange = () => { accountId = sel.value; };
+    acctWrap.appendChild(h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, type === 'in' ? '받은 계좌' : '보낸 계좌'), sel));
+  }
   const catWrap = h('div');
   let category = '';
   if (type === 'deduct') {
@@ -138,13 +149,14 @@ function openEvent(t, type, refresh, prefill) {
     body: (close) => h('div', { class: 'stack' },
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '금액'), h('div', { class: 'input-suffix' }, amount, h('span', { class: 'suffix' }, '원'))),
       catWrap,
+      acctWrap,
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '날짜'), date),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, type === 'deduct' ? '내용' : '메모'), memo),
       h('button', {
         class: 'btn btn--primary btn--lg', onClick: async () => {
           const amt = parseNum(amount.value);
           if (amt <= 0) return toast('금액을 입력해 주세요.', 'bad');
-          await store.addLedger({ tenantId: t.id, type, amount: amt, category, memo: memo.value, date: date.value });
+          await store.addLedger({ tenantId: t.id, type, amount: amt, category, memo: memo.value, date: date.value, accountId });
           close(); toast('기록했어요', 'ok'); refresh();
         },
       }, icon('check'), '기록하기'),

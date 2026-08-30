@@ -12,6 +12,7 @@ const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
 export async function renderBankImport() {
   const buildingId = await store.getCurrentBuildingId();
   const tenants = (await store.getTenants(buildingId)).filter((t) => t.status !== 'movedout');
+  const accounts = await store.getAccounts(buildingId);
 
   const result = h('div');
   const fileInput = h('input', { type: 'file', accept: '.xls,.xlsx,.csv', style: { display: 'none' } });
@@ -64,6 +65,7 @@ export async function renderBankImport() {
     const existing = await store.getAllPaymentsForBuilding(buildingId);
     const isDup = (t) => existing.some((p) => p.paidAt === t.date && p.amount === t.amount && norm(p.depositorName) === norm(t.name));
     const rules = await store.getMatchRules(buildingId);
+    let acctId = accounts.length === 1 ? accounts[0].id : '';
 
     // 입금자명으로 묶기 (같은 이름은 한 덩어리)
     const map = new Map();
@@ -100,7 +102,7 @@ export async function renderBankImport() {
         if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
         else if (g.decision) {
           rules2.aliases[g.key] = g.decision; // 다음에도 기억
-          for (const t of g.live) { await store.addPayment({ buildingId, tenantId: g.decision, month: t.date.slice(0, 7), amount: t.amount, depositorName: t.name, paidAt: t.date, source: 'bank', note: '은행파일' }); saved++; }
+          for (const t of g.live) { await store.addPayment({ buildingId, tenantId: g.decision, month: t.date.slice(0, 7), amount: t.amount, depositorName: t.name, paidAt: t.date, source: 'bank', note: '은행파일', accountId: acctId || null }); saved++; }
         }
       }
       await store.saveMatchRules(buildingId, rules2);
@@ -132,7 +134,15 @@ export async function renderBankImport() {
     result.append(
       h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
         h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, `입금 ${txns.length}건 · 입금자 ${groups.length}명`),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, '같은 이름은 한 번만 정하면 그 이름 전부에 적용돼요. 한 번 정한 이름은 다음에도 자동으로 기억해요.')),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, '같은 이름은 한 번만 정하면 그 이름 전부에 적용돼요. 한 번 정한 이름은 다음에도 자동으로 기억해요.'),
+        accounts.length > 0 && (() => {
+          const sel = h('select', { class: 'select', style: { marginTop: '10px' } },
+            h('option', { value: '' }, '계좌 선택 안 함'),
+            ...accounts.map((a) => h('option', { value: a.id, selected: acctId === a.id }, `${a.bankName}${a.alias ? ' · ' + a.alias : ''}`)));
+          sel.onchange = () => { acctId = sel.value; };
+          return h('div', { style: { marginTop: '4px' } }, h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '4px' } }, '이 파일은 어느 계좌예요? (여러 계좌 쓸 때 구분용)'), sel);
+        })(),
+      ),
       banner('info', { text: '“확인 필요”만 골라주면 돼요. 세입자 이름과 달라도 이 세입자로 지정하면 다음부터 자동 연결돼요. 필요 없는 입금은 “제외”.' }),
       dupTotal > 0 && h('div', { class: 'muted center', style: { fontSize: 'var(--fs-sm)' } }, `이미 저장된 ${dupTotal}건은 자동으로 건너뛰어요.`),
       h('div', { class: 'stack', style: { marginTop: '12px' } }, ...groups.map(groupEl)),
