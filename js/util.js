@@ -97,15 +97,27 @@ export function openSheet({ title, desc, body, onClose } = {}) {
     desc && h('p', { class: 'sheet__desc' }, desc),
   );
   const backdrop = h('div', { class: 'sheet-backdrop' }, sheet);
-  const close = () => {
+  let closed = false, poppedByBack = false;
+  const finish = () => {
+    if (closed) return; closed = true;
     backdrop.style.animation = 'fade .15s ease reverse';
     sheet.style.animation = 'slideup .2s ease reverse';
     setTimeout(() => { backdrop.remove(); onClose && onClose(); }, 180);
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('popstate', onPop);
+  };
+  // 뒤로가기(하드웨어/브라우저) = 시트만 닫기. 열 때 히스토리 항목 하나 추가.
+  const onPop = () => { poppedByBack = true; finish(); };
+  const close = () => {
+    if (closed) return;
+    if (!poppedByBack) { window.removeEventListener('popstate', onPop); history.back(); }
+    finish();
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   document.addEventListener('keydown', onKey);
+  history.pushState({ __sheet: true }, '');
+  window.addEventListener('popstate', onPop);
   if (body) append(sheet, [typeof body === 'function' ? body(close) : body]);
   clear(root).appendChild(backdrop);
   return { close, sheet };

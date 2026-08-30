@@ -91,9 +91,9 @@ export async function renderTenantDetail({ params }) {
               h('div', { class: 'muted' }, `월세 ${won(hh.rent)} · 관리비 ${won(hh.fee)}`)),
             (t.rentHistory.length > 1) && h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: async () => { await store.deleteRateChange(t.id, hh.from); toast('삭제했어요'); refresh(); } }, icon('trash')),
           )),
-          h('button', { class: 'btn btn--secondary', onClick: () => openRateChange(t, refresh) }, icon('plus'), '요금 변경 등록'),
+          h('button', { class: 'btn btn--secondary btn--block', onClick: () => openRateChange(t, refresh) }, icon('plus'), '요금 변경 등록'),
+          banner('info', { text: '요금을 바꿔도, 바꾸기 전 달의 미납은 예전 금액 그대로 계산돼요.' }),
         ),
-        banner('info', { text: '요금을 바꿔도, 바꾸기 전 달의 미납은 예전 금액 그대로 계산돼요.' }),
       ),
 
       // 보증금 요약

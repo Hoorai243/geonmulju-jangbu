@@ -130,6 +130,7 @@ input, textarea { caret-color: var(--primary); }
   font-family: inherit; font-size: var(--fs-lg); font-weight: 700;
   border-radius: var(--r-md); border: 2px solid transparent;
   cursor: pointer; text-decoration: none; line-height: 1;
+  white-space: nowrap;
   transition: background .15s ease, transform .05s ease, border-color .15s ease;
   -webkit-tap-highlight-color: transparent;
 }
@@ -148,7 +149,7 @@ input, textarea { caret-color: var(--primary); }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 .btn-row { display: flex; gap: var(--sp-3); }
-.btn-row > .btn { flex: 1; }
+.btn-row > .btn { flex: 1; min-width: 0; padding-left: var(--sp-3); padding-right: var(--sp-3); }
 
 /* ---------- 카드 / 목록 ---------- */
 .card {
@@ -258,7 +259,7 @@ textarea.input { padding: var(--sp-3) var(--sp-4); min-height: 120px; resize: ve
 .choice__opt {
   min-height: var(--tap); border: 2px solid var(--line-strong); border-radius: var(--r-md);
   background: var(--surface); font-size: var(--fs-lg); font-weight: 700; color: var(--ink-2);
-  display: flex; align-items: center; justify-content: center; gap: var(--sp-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-2); cursor: pointer; white-space: nowrap;
 }
 .choice__opt--on { border-color: var(--primary); background: var(--primary-tint); color: var(--primary-press); }
 
