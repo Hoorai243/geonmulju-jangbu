@@ -1,5 +1,5 @@
 // 입금 확인 공통 흐름 — (A) 입금자명으로 찾기, (B) 세입자 지정 후 금액 확인.
-import { h, won, parseNum, attachAmountFormat, todayISO, formatMonth, toast, openSheet, clear } from '../util.js';
+import { h, won, parseNum, attachAmountFormat, todayISO, formatMonth, toast, openSheet, clear, append } from '../util.js';
 import { icon } from '../icons.js';
 import { statusChip } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -57,17 +57,31 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '이번에 받은 금액'), h('div', { class: 'input-suffix' }, amount, h('span', { class: 'suffix' }, '원')), diffLine, preview),
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '입금자명'), depositor),
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '입금일'), date),
-        h('div', { class: 'btn-row' },
-          h('button', { class: 'btn btn--secondary', onClick: close }, '취소'),
-          h('button', {
-            class: 'btn btn--primary', onClick: async () => {
-              const amt = parseNum(amount.value);
-              if (amt <= 0) return toast('받은 금액을 입력해 주세요.', 'bad');
-              await store.addPayment({ buildingId: tenant.buildingId, tenantId: tenant.id, month, amount: amt, depositorName: depositor.value, paidAt: date.value, source: 'manual' });
-              close(); toast('입금을 기록했어요', 'ok'); onDone && onDone();
-            },
-          }, icon('check'), '확인 완료'),
-        ),
+        (() => {
+          const actionArea = h('div');
+          const doSave = async (amt) => {
+            await store.addPayment({ buildingId: tenant.buildingId, tenantId: tenant.id, month, amount: amt, depositorName: depositor.value, paidAt: date.value, source: 'manual' });
+            close(); toast('입금을 기록했어요', 'ok'); onDone && onDone();
+          };
+          const showInitial = () => { clear(actionArea); append(actionArea, [
+            h('div', { class: 'btn-row' },
+              h('button', { class: 'btn btn--secondary', onClick: close }, '취소'),
+              h('button', { class: 'btn btn--primary', onClick: () => {
+                const amt = parseNum(amount.value);
+                if (amt <= 0) return toast('받은 금액을 입력해 주세요.', 'bad');
+                showConfirm(amt);
+              } }, icon('check'), '확인 완료')),
+          ]); };
+          const showConfirm = (amt) => { clear(actionArea); append(actionArea, [
+            h('div', { class: 'banner banner--warn' }, icon('alert'),
+              h('div', {}, h('strong', {}, '이대로 저장할까요?'), `${tenant.unit}호 ${tenant.name} · ${formatMonth(month)} · ${won(amt)}원`)),
+            h('div', { class: 'btn-row', style: { marginTop: '8px' } },
+              h('button', { class: 'btn btn--secondary', onClick: showInitial }, '다시 볼게요'),
+              h('button', { class: 'btn btn--primary', onClick: () => doSave(amt) }, icon('check'), '네, 저장')),
+          ]); };
+          showInitial();
+          return actionArea;
+        })(),
       );
     },
   });
