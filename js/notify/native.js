@@ -44,8 +44,13 @@ export async function cancelMonthEndReminder() {
 export function wireNotificationTap(navigate) {
   const ln = LN();
   if (!ln) return;
-  ln.addListener('localNotificationActionPerformed', (e) => {
-    const route = e && e.notification && e.notification.extra && e.notification.extra.route;
-    if (route) navigate(route);
-  }).catch(() => {});
+  // addListener 는 promise 가 아니라 핸들을 돌려줄 수 있어서 .catch 를 붙이면 안 됨.
+  try {
+    ln.addListener('localNotificationActionPerformed', (e) => {
+      const route = e && e.notification && e.notification.extra && e.notification.extra.route;
+      if (route) navigate(route);
+    });
+  } catch (err) {
+    console.warn('알림 탭 연결 실패', err);
+  }
 }

@@ -30,11 +30,16 @@ async function boot() {
   }
 
   // 네이티브(안드로이드 앱): 월말 정리 알림을 설정에 맞춰 예약/해제 + 알림 탭 연결
+  // 알림 쪽에서 문제가 생겨도 앱 시작 자체는 절대 막지 않도록 감싼다.
   if (isNative()) {
-    wireNotificationTap(navigate);
-    const nd = await store.getNotifyDefaults();
-    if (nd.enabled && nd.bankReminder !== false) ensureMonthEndReminder({ day: nd.bankReminderDay || 25 });
-    else cancelMonthEndReminder();
+    try {
+      wireNotificationTap(navigate);
+      const nd = await store.getNotifyDefaults();
+      if (nd.enabled && nd.bankReminder !== false) ensureMonthEndReminder({ day: nd.bankReminderDay || 25 });
+      else cancelMonthEndReminder();
+    } catch (e) {
+      console.warn('알림 설정 중 문제(무시하고 계속)', e);
+    }
   }
 
   // 로그인 관문
