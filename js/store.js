@@ -192,6 +192,11 @@ export async function updatePayment(id, patch) {
 }
 export async function deletePayment(id) { return db.del('payment_log', id); }
 
+export async function getAllPaymentsForBuilding(buildingId) {
+  const all = await db.getAll('payment_log');
+  return all.filter((p) => p.buildingId === buildingId);
+}
+
 // 미확인 입금(세입자에 아직 못 붙인 입금)
 export async function getUnmatched(buildingId) {
   const all = await db.getAll('payment_log');

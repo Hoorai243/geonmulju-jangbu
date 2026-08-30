@@ -23,6 +23,7 @@ function ratio(a, b) {
 // 입금자명과 세입자 1명의 점수(0~1)
 function scoreTenant(depositor, tenant) {
   const d = norm(depositor);
+  if (!d) return 0; // 입금자명이 비어있으면 매칭 안 함
   const cand = [norm(tenant.name), norm(tenant.businessName)].filter(Boolean);
   let best = 0;
   for (const c of cand) {

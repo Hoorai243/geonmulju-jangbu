@@ -48,8 +48,10 @@ export async function renderDashboard({ query } = { query: {} }) {
 
     // 입금 확인 버튼
     tenants.length > 0 && h('div', { class: 'stack mt-4' },
-      h('button', { class: 'btn btn--primary btn--lg', onClick: () => openNameMatch({ buildingId, month, onDone: refresh }) },
-        icon('search'), '입금 확인하기'),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: () => navigate('/bank-import') },
+        icon('download'), '은행 파일로 정리'),
+      h('button', { class: 'btn btn--secondary btn--lg', onClick: () => openNameMatch({ buildingId, month, onDone: refresh }) },
+        icon('search'), '입금 직접 확인'),
       // ⚠️ 임시 수기 도우미 — 오픈뱅킹 자동연동이 되면 제거 후보
       counts.ok < tenants.length && h('button', { class: 'btn btn--secondary btn--lg', onClick: () => navigate('/quick-pay?m=' + month) },
         icon('check'), '한 번에 확인'),
