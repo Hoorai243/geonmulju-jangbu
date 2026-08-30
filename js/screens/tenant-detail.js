@@ -6,6 +6,7 @@ import * as store from '../store.js';
 import { navigate } from '../router.js';
 import { openConfirmForTenant } from './pay-flow.js';
 import { exportTenantExcel, exportTenantImage } from '../export/export.js';
+import { requireAuth } from '../ui/authgate.js';
 
 export async function renderTenantDetail({ params }) {
   const t = await store.getTenant(params.id);
@@ -35,7 +36,9 @@ export async function renderTenantDetail({ params }) {
     }),
     h('div', { class: 'stack-lg' },
 
-      t.status === 'movedout' && banner('info', { title: '퇴거한 세입자예요', text: `퇴거일: ${formatDate(t.movedOutAt)}` }),
+      t.status === 'movedout' && h('div', { class: 'card stack' },
+        banner('info', { title: '퇴거한 세입자예요', text: `퇴거일: ${formatDate(t.movedOutAt)}. 실수로 눌렀다면 되돌릴 수 있어요.` }),
+        h('button', { class: 'btn btn--secondary btn--block', onClick: async () => { await store.reactivateTenant(t.id); toast('다시 활성으로 되돌렸어요', 'ok'); refresh(); } }, icon('refund'), '퇴거 취소 (다시 활성)')),
 
       // 기본 정보
       h('div', { class: 'card' },
@@ -228,8 +231,9 @@ function doMoveOut(t) {
   });
 }
 function doDelete(t) {
-  confirmSheet({
-    title: '정말 삭제할까요?', desc: `${t.unit}호 ${t.name}님의 모든 입금·보증금 기록이 함께 지워져요. 되돌릴 수 없어요.`,
-    confirmText: '삭제', danger: true, onConfirm: async () => { await store.deleteTenant(t.id); toast('삭제했어요'); navigate('/tenants', { replace: true }); },
+  requireAuth({
+    title: `${t.unit}호 ${t.name} 삭제`,
+    desc: '모든 입금·보증금 기록이 함께 지워지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.',
+    confirmText: '삭제', onConfirm: async () => { await store.deleteTenant(t.id); toast('삭제했어요'); navigate('/tenants', { replace: true }); },
   });
 }

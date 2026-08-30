@@ -7,6 +7,7 @@ import * as db from '../db.js';
 import * as auth from '../auth/auth.js';
 import { navigate } from '../router.js';
 import { exportBuildingExcel, exportBuildingImage } from '../export/export.js';
+import { requireAuth } from '../ui/authgate.js';
 
 /* ---------- 더보기 메뉴 ---------- */
 export async function renderMore() {
@@ -51,7 +52,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.12.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.13.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -84,8 +85,8 @@ function restore() {
     const file = input.files[0]; if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      confirmSheet({
-        title: '백업을 불러올까요?', desc: '지금 저장된 내용은 백업 파일 내용으로 덮어써져요.', confirmText: '불러오기', danger: true,
+      requireAuth({
+        title: '백업 불러오기', desc: '지금 저장된 내용이 백업 파일 내용으로 덮어써지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.', confirmText: '불러오기',
         onConfirm: async () => { await db.importAll(data); toast('불러왔어요', 'ok'); navigate('/', { replace: true }); },
       });
     } catch { toast('백업 파일을 읽을 수 없어요.', 'bad'); }

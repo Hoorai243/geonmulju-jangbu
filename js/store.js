@@ -186,6 +186,13 @@ export async function moveOutTenant(id, dateISO) {
   await db.put('tenants', t);
   return t;
 }
+export async function reactivateTenant(id) {
+  const t = await db.get('tenants', id);
+  t.status = 'active'; t.movedOutAt = null;
+  await db.put('tenants', t);
+  return t;
+}
+
 export async function deleteTenant(id) {
   // 세입자 삭제 시 관련 기록도 정리
   const pays = await db.getBy('payment_log', 'byTenant', id);
