@@ -43,11 +43,12 @@ export async function renderMore() {
           link('download', '백업 파일 저장', backup),
           link('history', '백업 파일 불러오기', restore),
         ),
-        banner('info', { text: '이 앱은 이 기기 안에만 저장돼요. 기기를 바꾸거나 지울 때를 대비해 가끔 백업 파일을 저장해 두면 안전해요.' }),
+        h('div', { style: { marginTop: 'var(--sp-4)' } },
+          banner('info', { text: '이 앱은 이 기기 안에만 저장돼요. 기기를 바꾸거나 지울 때를 대비해 가끔 백업 파일을 저장해 두면 안전해요.' })),
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.2.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.2.1'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -180,7 +181,7 @@ export async function renderNotifySettings() {
   const d = await store.getNotifyDefaults();
   const mk = (key) => { const cb = h('input', { type: 'checkbox', checked: !!d[key] }); cb.onchange = async () => { d[key] = cb.checked; await store.setNotifyDefaults(d); toast('저장했어요', 'ok'); }; return h('label', { class: 'switch' }, cb, h('span', { class: 'switch__track' })); };
 
-  const daysSel = h('select', { class: 'select' }, ...[7, 14, 30, 60].map((n) => h('option', { value: String(n), selected: (d.daysBefore || 30) === n }, `${n}일 전`)));
+  const daysSel = h('select', { class: 'select', style: { width: '150px', flex: 'none' } }, ...[7, 14, 30, 60].map((n) => h('option', { value: String(n), selected: (d.daysBefore || 30) === n }, `${n}일 전`)));
   daysSel.onchange = async () => { d.daysBefore = Number(daysSel.value); await store.setNotifyDefaults(d); toast('저장했어요', 'ok'); };
 
   return screen({ plain: true },
