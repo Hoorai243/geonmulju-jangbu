@@ -1,7 +1,7 @@
 // 업무 규칙 계층 — 세입자/요금/납부상태/보증금 계산.
 // 화면은 이 파일의 함수만 부른다. 저장 위치(db.js)가 바뀌어도 화면은 그대로.
 import * as db from './db.js';
-import { uid, monthKey, todayISO, compareMonth, addMonths } from './util.js';
+import { uid, monthKey, todayISO, compareMonth, addMonths, parseMonth } from './util.js';
 
 // 호실 번호 자연 정렬 (101, 102, 201 ... B1 등 섞여도 숫자 우선)
 export function unitSort(a = '', b = '') {
@@ -71,17 +71,20 @@ export async function saveTenant(data) {
   });
   // 요금 이력: 신규면 초기 1건, 기존이면 유지
   if (!rec.rentHistory) {
-    rec.rentHistory = [{ from: rec.contractStart, rent: Number(data.rent) || 0, fee: Number(data.fee) || 0 }];
+    rec.rentHistory = [{
+      from: rec.contractStart, rent: Number(data.rent) || 0, fee: Number(data.fee) || 0,
+      water: Number(data.water) || 0, waterCycle: data.waterCycle || 'none', waterParity: data.waterParity || 'odd',
+    }];
   }
   await db.put('tenants', rec);
   return rec;
 }
 
 // 요금 변경 등록 — 지정한 월부터 새 금액 적용. 그 전 미납은 옛 금액으로 계산됨.
-export async function changeRates(tenantId, { from, rent, fee }) {
+export async function changeRates(tenantId, { from, rent, fee, water = 0, waterCycle = 'none', waterParity = 'odd' }) {
   const t = await db.get('tenants', tenantId);
   t.rentHistory = (t.rentHistory || []).filter((h) => h.from !== from);
-  t.rentHistory.push({ from, rent: Number(rent) || 0, fee: Number(fee) || 0 });
+  t.rentHistory.push({ from, rent: Number(rent) || 0, fee: Number(fee) || 0, water: Number(water) || 0, waterCycle, waterParity });
   t.rentHistory.sort((a, b) => compareMonth(a.from, b.from));
   await db.put('tenants', t);
   return t;
@@ -95,14 +98,43 @@ export async function deleteRateChange(tenantId, from) {
 }
 
 // 특정 월의 적용 요금(변경 이력 반영). 계약 시작 이전 달은 낼 것이 없음(0).
+// 수도세(water)는 매월/격월(홀수달·짝수달) 선택 가능 → 부과되는 달에만 total에 더해짐.
 export function ratesForMonth(tenant, month) {
   const hist = [...(tenant.rentHistory || [])].sort((a, b) => compareMonth(a.from, b.from));
   const start = hist[0]?.from || tenant.contractStart;
-  if (start && compareMonth(month, start) < 0) return { rent: 0, fee: 0, total: 0 };
+  if (start && compareMonth(month, start) < 0) return { rent: 0, fee: 0, water: 0, waterCharged: false, total: 0 };
   let cur = hist[0] || { rent: 0, fee: 0 };
   for (const h of hist) { if (compareMonth(h.from, month) <= 0) cur = h; }
   const rent = Number(cur.rent) || 0, fee = Number(cur.fee) || 0;
-  return { rent, fee, total: rent + fee };
+  const water = waterForMonth(cur, month);
+  return { rent, fee, water, waterCharged: water > 0, total: rent + fee + water };
+}
+
+// 이 달에 부과되는 수도세 금액(격월이면 해당 달이 아닐 때 0)
+function waterForMonth(rateEntry, month) {
+  const amt = Number(rateEntry.water) || 0;
+  const cycle = rateEntry.waterCycle || 'none';
+  if (amt <= 0 || cycle === 'none') return 0;
+  if (cycle === 'monthly') return amt;
+  if (cycle === 'bimonthly') {
+    const m = parseMonth(month).m;
+    const isOdd = m % 2 === 1;
+    const charge = rateEntry.waterParity === 'even' ? !isOdd : isOdd; // 기본 홀수달
+    return charge ? amt : 0;
+  }
+  return 0;
+}
+
+// 세입자의 현재(또는 특정 월 기준) 수도세 설정 반환
+export function waterConfig(tenant, month = monthKey()) {
+  const hist = [...(tenant.rentHistory || [])].sort((a, b) => compareMonth(a.from, b.from));
+  let cur = hist[0] || {};
+  for (const h of hist) { if (compareMonth(h.from, month) <= 0) cur = h; }
+  return {
+    amount: Number(cur.water) || 0,
+    cycle: cur.waterCycle || 'none',
+    parity: cur.waterParity || 'odd',
+  };
 }
 
 export async function setNotifyOverride(id, value) {

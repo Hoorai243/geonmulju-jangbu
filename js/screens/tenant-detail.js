@@ -49,6 +49,9 @@ export async function renderTenantDetail({ params }) {
           dt('계약 기간'), dd(`${formatMonth(t.contractStart)} ~ ${t.contractEnd ? formatMonth(t.contractEnd) : '미정'}`),
           dt('월세'), dd(won(rate.rent) + '원'),
           dt('관리비'), dd(won(rate.fee) + '원'),
+          ...(() => { const w = store.waterConfig(t, month); return w.cycle !== 'none' && w.amount > 0
+            ? [dt('수도세'), dd(`${won(w.amount)}원 · ${w.cycle === 'monthly' ? '매월' : '격월(' + (w.parity === 'even' ? '짝수달' : '홀수달') + ')'}`)]
+            : []; })(),
           dt('납기일'), dd(`매월 ${t.dueDay || 1}일`),
           t.phone ? dt('휴대폰') : null, t.phone ? dd(t.phone) : null,
           t.bizNo ? dt('사업자번호') : null, t.bizNo ? dd(t.bizNo) : null,
@@ -129,15 +132,54 @@ function statusCls(s) { return s === 'ok' ? 'ok' : s === 'part' ? 'warn' : s ===
 function openRateChange(t, refresh) {
   const from = h('input', { class: 'input', type: 'month', value: monthKey() });
   const cur = store.ratesForMonth(t, monthKey());
+  const wc = store.waterConfig(t, monthKey());
   const rent = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.rent ? cur.rent.toLocaleString('ko-KR') : '' }));
   const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.fee ? cur.fee.toLocaleString('ko-KR') : '' }));
+
+  // 수도세
+  let waterCycle = wc.cycle === 'none' ? 'monthly' : wc.cycle;
+  let waterParity = wc.parity || 'odd';
+  const waterAmount = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: wc.amount ? wc.amount.toLocaleString('ko-KR') : '' }));
+  const waterCb = h('input', { type: 'checkbox', checked: wc.cycle !== 'none' });
+  const waterSwitch = h('label', { class: 'switch' }, waterCb, h('span', { class: 'switch__track' }));
+  const cM = h('button', { type: 'button', class: 'choice__opt' }, '매월');
+  const cB = h('button', { type: 'button', class: 'choice__opt' }, '격월');
+  const pO = h('button', { type: 'button', class: 'choice__opt' }, '홀수 달');
+  const pE = h('button', { type: 'button', class: 'choice__opt' }, '짝수 달');
+  const parityRow = h('div', { class: 'choice' }, pO, pE);
+  const wDetails = h('div', { class: 'stack', style: { marginTop: '12px' } },
+    h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '한 번 낼 수도세'), h('div', { class: 'input-suffix' }, waterAmount, h('span', { class: 'suffix' }, '원'))),
+    h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '주기'), h('div', { class: 'choice' }, cM, cB)),
+    h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '언제'), parityRow),
+  );
+  const rc = () => { cM.classList.toggle('choice__opt--on', waterCycle === 'monthly'); cB.classList.toggle('choice__opt--on', waterCycle === 'bimonthly'); parityRow.parentElement.style.display = waterCycle === 'bimonthly' ? 'block' : 'none'; };
+  const rp = () => { pO.classList.toggle('choice__opt--on', waterParity === 'odd'); pE.classList.toggle('choice__opt--on', waterParity === 'even'); };
+  const rw = () => { wDetails.style.display = waterCb.checked ? 'block' : 'none'; rc(); rp(); };
+  cM.onclick = () => { waterCycle = 'monthly'; rc(); }; cB.onclick = () => { waterCycle = 'bimonthly'; rc(); };
+  pO.onclick = () => { waterParity = 'odd'; rp(); }; pE.onclick = () => { waterParity = 'even'; rp(); };
+  waterCb.onchange = rw; rw();
+
   openSheet({
     title: '요금 변경', desc: '언제부터 얼마로 바꿀지 정해요.',
     body: (close) => h('div', { class: 'stack' },
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '적용 시작월'), from),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 월세'), h('div', { class: 'input-suffix' }, rent, h('span', { class: 'suffix' }, '원'))),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 관리비'), h('div', { class: 'input-suffix' }, fee, h('span', { class: 'suffix' }, '원'))),
-      h('button', { class: 'btn btn--primary btn--lg', onClick: async () => { await store.changeRates(t.id, { from: from.value, rent: parseNum(rent.value), fee: parseNum(fee.value) }); close(); toast('요금을 바꿨어요', 'ok'); refresh(); } }, '저장'),
+      h('div', { class: 'card' },
+        h('div', { class: 'settingrow', style: { padding: 0 } },
+          h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '수도세 따로 받기')),
+          waterSwitch),
+        wDetails),
+      h('button', {
+        class: 'btn btn--primary btn--lg', onClick: async () => {
+          await store.changeRates(t.id, {
+            from: from.value, rent: parseNum(rent.value), fee: parseNum(fee.value),
+            water: waterCb.checked ? parseNum(waterAmount.value) : 0,
+            waterCycle: waterCb.checked ? waterCycle : 'none', waterParity,
+          });
+          close(); toast('요금을 바꿨어요', 'ok'); refresh();
+        },
+      }, '저장'),
     ),
   });
 }

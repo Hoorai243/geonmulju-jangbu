@@ -45,6 +45,42 @@ export async function renderTenantForm({ params }) {
 
   const suffixWon = (input) => h('div', { class: 'input-suffix' }, input, h('span', { class: 'suffix' }, '원'));
 
+  // ----- 수도세 따로 받기 (매월/격월) -----
+  const wc = t ? store.waterConfig(t, baseFrom) : { amount: 0, cycle: 'none', parity: 'odd' };
+  let waterCycle = wc.cycle === 'none' ? 'monthly' : wc.cycle; // 켰을 때 기본 매월
+  let waterParity = wc.parity || 'odd';
+  const waterAmount = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', placeholder: '0', value: wc.amount ? wc.amount.toLocaleString('ko-KR') : '' }));
+  const waterCb = h('input', { type: 'checkbox', checked: wc.cycle !== 'none' });
+  const waterSwitch = h('label', { class: 'switch' }, waterCb, h('span', { class: 'switch__track' }));
+
+  const cycleMonthly = h('button', { type: 'button', class: 'choice__opt' }, '매월');
+  const cycleBi = h('button', { type: 'button', class: 'choice__opt' }, '격월');
+  const parityOdd = h('button', { type: 'button', class: 'choice__opt' }, '홀수 달');
+  const parityEven = h('button', { type: 'button', class: 'choice__opt' }, '짝수 달');
+  const parityField = field('언제 받나요', h('div', { class: 'choice' }, parityOdd, parityEven), null, '격월이면 이 달들에만 수도세가 붙어요. (홀수 달 = 1·3·5·7·9·11월)');
+  const waterDetails = h('div', { class: 'stack', style: { marginTop: '16px' } },
+    field('한 번 낼 수도세', suffixWon(waterAmount)),
+    field('수도세 주기', h('div', { class: 'choice' }, cycleMonthly, cycleBi)),
+    parityField,
+    h('p', { class: 'hint' }, '※ 수도세를 따로 받으면, 위 “관리비”에는 수도세를 빼고 적어 주세요.'),
+  );
+  const renderCycle = () => {
+    cycleMonthly.classList.toggle('choice__opt--on', waterCycle === 'monthly');
+    cycleBi.classList.toggle('choice__opt--on', waterCycle === 'bimonthly');
+    parityField.style.display = waterCycle === 'bimonthly' ? 'block' : 'none';
+  };
+  const renderParity = () => {
+    parityOdd.classList.toggle('choice__opt--on', waterParity === 'odd');
+    parityEven.classList.toggle('choice__opt--on', waterParity === 'even');
+  };
+  const renderWater = () => { waterDetails.style.display = waterCb.checked ? 'block' : 'none'; renderCycle(); renderParity(); };
+  cycleMonthly.onclick = () => { waterCycle = 'monthly'; renderCycle(); };
+  cycleBi.onclick = () => { waterCycle = 'bimonthly'; renderCycle(); };
+  parityOdd.onclick = () => { waterParity = 'odd'; renderParity(); };
+  parityEven.onclick = () => { waterParity = 'even'; renderParity(); };
+  waterCb.onchange = renderWater;
+  renderWater();
+
   const save = async () => {
     if (!unit.value.trim()) return toast('호실 번호를 입력해 주세요.', 'bad');
     if (!name.value.trim()) return toast('세입자 이름을 입력해 주세요.', 'bad');
@@ -59,10 +95,13 @@ export async function renderTenantForm({ params }) {
       contractStart: contractStart.value || monthKey(),
       contractEnd: contractEnd.value || '',
       rent: parseNum(rent.value), fee: parseNum(fee.value),
+      water: waterCb.checked ? parseNum(waterAmount.value) : 0,
+      waterCycle: waterCb.checked ? waterCycle : 'none',
+      waterParity,
     };
     const saved = await store.saveTenant(data);
     // 기본 요금 동기화(수정 시)
-    if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee });
+    if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
     toast(editing ? '수정했어요' : '세입자를 등록했어요', 'ok');
     navigate('/tenant/' + saved.id, { replace: true });
   };
@@ -86,6 +125,15 @@ export async function renderTenantForm({ params }) {
       field('계약 시작월', contractStart),
       field('계약 만료월', contractEnd, '선택'),
       field('납기일', dueDay, null, '이 날짜에서 3일이 지나도록 입금이 없으면 “미납(빨강)”으로 표시돼요.'),
+      // 수도세 따로 받기
+      h('div', { class: 'card' },
+        h('div', { class: 'settingrow', style: { padding: 0 } },
+          h('div', { class: 'settingrow__main' },
+            h('div', { class: 'settingrow__title' }, '수도세 따로 받기'),
+            h('div', { class: 'settingrow__desc' }, '매월 또는 격월(2개월에 한 번)로 받을 수 있어요')),
+          waterSwitch),
+        waterDetails,
+      ),
       h('button', { class: 'btn btn--primary btn--lg', onClick: save }, editing ? '수정 저장' : '등록하기'),
       h('div', { style: { height: '12px' } }),
     ),
