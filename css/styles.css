@@ -369,11 +369,12 @@ textarea.input { padding: var(--sp-3) var(--sp-4); min-height: 120px; resize: ve
 
 /* 링크 목록(더보기) */
 .linklist { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); overflow: hidden; }
-.linkrow { display: flex; align-items: center; gap: var(--sp-4); width: 100%; padding: var(--sp-4) var(--sp-5); min-height: var(--tap); background: transparent; border: none; border-bottom: 1px solid var(--line); font-family: inherit; font-size: var(--fs-lg); font-weight: 700; color: var(--ink); cursor: pointer; text-align: left; }
+.linkrow { display: flex; align-items: center; gap: var(--sp-4); width: 100%; padding: var(--sp-4) var(--sp-5); min-height: var(--tap); background: transparent; border: none; border-bottom: 1px solid var(--line); font-family: inherit; font-size: var(--fs-body); font-weight: 700; color: var(--ink); cursor: pointer; text-align: left; }
 .linkrow:last-child { border-bottom: none; }
 .linkrow:hover { background: var(--surface-2); }
 .linkrow svg.lead { width: 26px; height: 26px; color: var(--primary); flex: none; }
-.linkrow .linkrow__chev { margin-left: auto; color: var(--ink-3); }
+.linkrow__label { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.linkrow .linkrow__chev { flex: none; color: var(--ink-3); }
 
 /* 유틸 */
 .muted { color: var(--ink-2); }

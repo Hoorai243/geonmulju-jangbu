@@ -83,6 +83,24 @@ export async function renderTenantForm({ params }) {
   waterCb.onchange = renderWater;
   renderWater();
 
+  // ----- 관리비 주기(매월/격월) -----
+  const fc = t ? store.feeConfig(t, baseFrom) : { cycle: 'monthly', parity: 'odd' };
+  let feeCycle = fc.cycle, feeParity = fc.parity;
+  const feeM = h('button', { type: 'button', class: 'choice__opt' }, '매월');
+  const feeB = h('button', { type: 'button', class: 'choice__opt' }, '격월');
+  const feePO = h('button', { type: 'button', class: 'choice__opt' }, '홀수 달');
+  const feePE = h('button', { type: 'button', class: 'choice__opt' }, '짝수 달');
+  const feeParityField = field('관리비 언제', h('div', { class: 'choice' }, feePO, feePE), null, '격월이면 이 달들에만 관리비가 붙어요. (홀수 달 = 1·3·5·7·9·11월)');
+  const feeCycleBlock = h('div', { class: 'stack', style: { marginTop: '4px' } },
+    field('관리비 주기', h('div', { class: 'choice' }, feeM, feeB)), feeParityField);
+  const fcRC = () => { feeM.classList.toggle('choice__opt--on', feeCycle === 'monthly'); feeB.classList.toggle('choice__opt--on', feeCycle === 'bimonthly'); feeParityField.style.display = feeCycle === 'bimonthly' ? 'block' : 'none'; };
+  const fcRP = () => { feePO.classList.toggle('choice__opt--on', feeParity === 'odd'); feePE.classList.toggle('choice__opt--on', feeParity === 'even'); };
+  feeM.onclick = () => { feeCycle = 'monthly'; fcRC(); };
+  feeB.onclick = () => { feeCycle = 'bimonthly'; fcRC(); };
+  feePO.onclick = () => { feeParity = 'odd'; fcRP(); };
+  feePE.onclick = () => { feeParity = 'even'; fcRP(); };
+  fcRC(); fcRP();
+
   const save = async () => {
     if (!unit.value.trim()) return toast('호실 번호를 입력해 주세요.', 'bad');
     if (!name.value.trim()) return toast('세입자 이름을 입력해 주세요.', 'bad');
@@ -98,13 +116,14 @@ export async function renderTenantForm({ params }) {
       contractStart: contractStart.value || monthKey(),
       contractEnd: contractEnd.value || '',
       rent: parseNum(rent.value), fee: parseNum(fee.value),
+      feeCycle, feeParity,
       water: waterCb.checked ? parseNum(waterAmount.value) : 0,
       waterCycle: waterCb.checked ? waterCycle : 'none',
       waterParity,
     };
     const saved = await store.saveTenant(data);
     // 기본 요금 동기화(수정 시)
-    if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
+    if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, feeCycle: data.feeCycle, feeParity: data.feeParity, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
     toast(editing ? '수정했어요' : '세입자를 등록했어요', 'ok');
     navigate('/tenant/' + saved.id, { replace: true });
   };
@@ -129,7 +148,8 @@ export async function renderTenantForm({ params }) {
       field('휴대폰 번호', phone, '선택', '미납 안내 문자를 보낼 때만 써요. (주민번호·계좌번호는 받지 않아요)'),
       banner('info', { text: '관리비에는 수도세·전기세를 포함해 매달 고정 금액으로 넣어요. 나중에 달라지면 “요금 변경”으로 바꿀 수 있어요.' }),
       field('월세', suffixWon(rent)),
-      field('관리비 (수도·전기 포함)', suffixWon(fee)),
+      field('관리비 (전기 등 포함)', suffixWon(fee)),
+      feeCycleBlock,
       field('보증금', suffixWon(deposit), '선택'),
       field('계약 시작월', contractStart),
       field('계약 만료월', contractEnd, '선택'),

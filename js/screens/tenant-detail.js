@@ -48,7 +48,7 @@ export async function renderTenantDetail({ params }) {
         h('dl', { class: 'deflist' },
           dt('계약 기간'), dd(`${formatMonth(t.contractStart)} ~ ${t.contractEnd ? formatMonth(t.contractEnd) : '미정'}`),
           dt('월세'), dd(won(rate.rent) + '원'),
-          dt('관리비'), dd(won(rate.fee) + '원'),
+          dt('관리비'), dd((() => { const f = store.feeConfig(t, month); return `${won(f.amount)}원${f.cycle === 'bimonthly' ? ' · 격월(' + (f.parity === 'even' ? '짝수달' : '홀수달') + ')' : ''}`; })()),
           ...(() => { const w = store.waterConfig(t, month); return w.cycle !== 'none' && w.amount > 0
             ? [dt('수도세'), dd(`${won(w.amount)}원 · ${w.cycle === 'monthly' ? '매월' : '격월(' + (w.parity === 'even' ? '짝수달' : '홀수달') + ')'}`)]
             : []; })(),
@@ -137,6 +137,21 @@ function openRateChange(t, refresh) {
   const rent = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.rent ? cur.rent.toLocaleString('ko-KR') : '' }));
   const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.fee ? cur.fee.toLocaleString('ko-KR') : '' }));
 
+  // 관리비 주기
+  const feeC = store.feeConfig(t, monthKey());
+  let feeCycle = feeC.cycle, feeParity = feeC.parity;
+  const fM = h('button', { type: 'button', class: 'choice__opt' }, '매월');
+  const fB = h('button', { type: 'button', class: 'choice__opt' }, '격월');
+  const fPO = h('button', { type: 'button', class: 'choice__opt' }, '홀수 달');
+  const fPE = h('button', { type: 'button', class: 'choice__opt' }, '짝수 달');
+  const feeParityRow = h('div', { class: 'choice' }, fPO, fPE);
+  const feeParityField = h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '언제'), feeParityRow);
+  const frc = () => { fM.classList.toggle('choice__opt--on', feeCycle === 'monthly'); fB.classList.toggle('choice__opt--on', feeCycle === 'bimonthly'); feeParityField.style.display = feeCycle === 'bimonthly' ? 'block' : 'none'; };
+  const frp = () => { fPO.classList.toggle('choice__opt--on', feeParity === 'odd'); fPE.classList.toggle('choice__opt--on', feeParity === 'even'); };
+  fM.onclick = () => { feeCycle = 'monthly'; frc(); }; fB.onclick = () => { feeCycle = 'bimonthly'; frc(); };
+  fPO.onclick = () => { feeParity = 'odd'; frp(); }; fPE.onclick = () => { feeParity = 'even'; frp(); };
+  frc(); frp();
+
   // 수도세
   let waterCycle = wc.cycle === 'none' ? 'monthly' : wc.cycle;
   let waterParity = wc.parity || 'odd';
@@ -166,6 +181,8 @@ function openRateChange(t, refresh) {
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '적용 시작월'), from),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 월세'), h('div', { class: 'input-suffix' }, rent, h('span', { class: 'suffix' }, '원'))),
       h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '새 관리비'), h('div', { class: 'input-suffix' }, fee, h('span', { class: 'suffix' }, '원'))),
+      h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '관리비 주기'), h('div', { class: 'choice' }, fM, fB)),
+      feeParityField,
       h('div', { class: 'card' },
         h('div', { class: 'settingrow', style: { padding: 0 } },
           h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '수도세 따로 받기')),
@@ -174,7 +191,7 @@ function openRateChange(t, refresh) {
       h('button', {
         class: 'btn btn--primary btn--lg', onClick: async () => {
           await store.changeRates(t.id, {
-            from: from.value, rent: parseNum(rent.value), fee: parseNum(fee.value),
+            from: from.value, rent: parseNum(rent.value), fee: parseNum(fee.value), feeCycle, feeParity,
             water: waterCb.checked ? parseNum(waterAmount.value) : 0,
             waterCycle: waterCb.checked ? waterCycle : 'none', waterParity,
           });
