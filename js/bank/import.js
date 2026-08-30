@@ -107,21 +107,25 @@ export const BANKS = [
   { id: 'auto', name: '다른 은행 (자동 감지)', verified: false },
 ];
 
-export async function readBankFile(file) {
+export async function readBankFile(file, { password } = {}) {
   const XLSX = await loadXLSX();
-  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(await file.arrayBuffer());
   let wb;
   try {
-    wb = XLSX.read(new Uint8Array(buf), { type: 'array', raw: false });
+    wb = XLSX.read(bytes, { type: 'array', raw: false });
   } catch (e) {
-    const m = (e && e.message) || '';
-    if (/password|encrypt/i.test(m)) {
-      // 비밀번호로 잠긴(암호화된) 파일 — 토스·카카오 등. 지금 부품으론 못 풀어서 안내로 처리.
-      const err = new Error('이 파일은 비밀번호로 잠겨 있어요.');
-      err.code = 'ENCRYPTED';
-      throw err;
+    if (!/password|encrypt/i.test((e && e.message) || '')) throw e;
+    // 잠긴(암호화된) 파일
+    if (!password) { const er = new Error('이 파일은 비밀번호로 잠겨 있어요.'); er.code = 'PW_REQUIRED'; throw er; }
+    const { decryptStandardXlsx } = await import('./decrypt.js');
+    let dec;
+    try {
+      dec = decryptStandardXlsx(bytes, password);
+    } catch (de) {
+      if (de.code === 'ENC_UNSUPPORTED') { const er = new Error(de.message); er.code = 'ENCRYPTED'; throw er; }
+      throw de; // PW_WRONG 등 그대로
     }
-    throw e;
+    wb = XLSX.read(dec, { type: 'array', raw: false });
   }
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });

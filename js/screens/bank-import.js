@@ -17,19 +17,32 @@ export async function renderBankImport() {
   const fileInput = h('input', { type: 'file', accept: '.xls,.xlsx,.csv', style: { display: 'none' } });
   const status = h('div', { class: 'muted center', style: { padding: '8px' } });
 
-  async function process(file) {
+  async function process(file, password) {
     clear(result);
-    status.textContent = '파일을 읽는 중…';
+    status.textContent = password ? '잠금을 푸는 중…' : '파일을 읽는 중…';
     try {
-      const txns = await readBankFile(file);
+      const txns = await readBankFile(file, { password });
       status.textContent = '';
       if (!txns.length) { clear(result).appendChild(banner('warn', { title: '입금 내역이 없어요', text: '이 파일에서 “입금” 거래를 못 찾았어요. 엑셀로 받은 거래내역 파일이 맞는지 확인해 주세요.' })); return; }
       await review(txns);
     } catch (e) {
       status.textContent = '';
+      if (e.code === 'PW_REQUIRED' || e.code === 'PW_WRONG') { showPasswordPrompt(file, e.code === 'PW_WRONG'); return; }
       if (e.code === 'ENCRYPTED') { showEncryptedHelp(); return; }
       clear(result).appendChild(banner('bad', { title: '읽지 못했어요', text: e.message || '파일을 읽을 수 없어요.' }));
     }
+  }
+
+  function showPasswordPrompt(file, wrong) {
+    const pw = h('input', { class: 'input', type: 'password', inputmode: 'numeric', placeholder: '예: 생년월일 6자리 (901231)' });
+    const open = () => { const v = pw.value.trim(); if (!v) return toast('파일 비밀번호를 입력해 주세요.', 'bad'); process(file, v); };
+    pw.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') open(); });
+    clear(result).appendChild(h('div', { class: 'card stack' },
+      banner(wrong ? 'bad' : 'info', { title: wrong ? '비밀번호가 맞지 않아요' : '이 파일은 비밀번호로 잠겨 있어요', text: '토스·카카오뱅크 등이 보내는 엑셀은 비밀번호로 잠겨 있어요. 보통 생년월일 6자리예요. 비밀번호는 이 기기에서만 쓰이고 어디에도 보내지 않아요.' }),
+      h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '파일 비밀번호'), pw),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: open }, icon('lock'), '잠금 풀고 열기'),
+    ));
+    setTimeout(() => pw.focus(), 100);
   }
 
   // 잠긴(암호화된) 파일 — 토스·카카오 등. 비밀번호 없이 다시 저장해서 올리도록 안내.
