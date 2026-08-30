@@ -1,7 +1,9 @@
 // 도움말 — 자주 헷갈리는 "되돌리기" 방법을 자세히 안내.
-import { h } from '../util.js';
+import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner } from '../ui/shell.js';
+import { resetCoaches } from '../ui/coach.js';
+import { navigate } from '../router.js';
 
 const GUIDES = [
   {
@@ -43,6 +45,11 @@ export async function renderHelp() {
         h('ol', { style: { margin: 0, paddingLeft: '22px', lineHeight: '1.8' } }, ...g.steps.map((s) => h('li', { style: { marginBottom: '8px' } }, s))),
         h('div', { class: 'banner banner--info', style: { marginTop: '12px' } }, icon('info'), h('div', {}, g.tip)),
       )),
+      h('div', { class: 'card' },
+        h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)', marginBottom: '8px' } }, '따라하기 안내 다시 보기'),
+        h('div', { class: 'muted', style: { marginBottom: '12px', lineHeight: '1.6' } }, '처음에 화면에서 알려줬던 “여기를 누르세요” 안내를 다시 보고 싶으면 눌러요.'),
+        h('button', { class: 'btn btn--secondary btn--lg', onClick: async () => { await resetCoaches(); toast('안내를 다시 볼 수 있어요', 'ok'); navigate('/'); } }, icon('info'), '따라하기 안내 다시 켜기'),
+      ),
       h('div', { style: { height: '12px' } }),
     ),
   );

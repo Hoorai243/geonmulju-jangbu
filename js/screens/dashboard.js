@@ -6,6 +6,7 @@ import * as store from '../store.js';
 import { computeAlerts } from '../notify/notify.js';
 import { navigate } from '../router.js';
 import { openNameMatch, openConfirmForTenant } from './pay-flow.js';
+import { coachMark } from '../ui/coach.js';
 
 export async function renderDashboard({ query } = { query: {} }) {
   const buildingId = await store.getCurrentBuildingId();
@@ -40,7 +41,7 @@ export async function renderDashboard({ query } = { query: {} }) {
     h('button', { class: 'iconbtn', 'aria-label': '다음 달', disabled: compareMonth(month, monthKey()) >= 0, onClick: () => navigate('/?m=' + addMonths(month, 1)) }, icon('chevRight')),
   );
 
-  return screen({ tab: '/' },
+  const view = screen({ tab: '/' },
     topbar({ title: '이번 달 현황', sub: building?.name, right: bell }),
     monthNav,
 
@@ -69,9 +70,23 @@ export async function renderDashboard({ query } = { query: {} }) {
       ? banner('info', { title: '세입자를 먼저 등록해요', text: '“세입자” 탭에서 등록하면 여기에서 입금을 확인할 수 있어요.' })
       : h('div', {},
         h('div', { class: 'section-title' }, '세입자별 상태'),
-        h('div', { class: 'stack' }, ...rows.map((r) => tenantRow(r, month, refresh))),
+        h('div', { class: 'stack' }, ...rows.map((r, i) => tenantRow(r, month, refresh, i === 0))),
       ),
   );
+
+  if (tenants.length > 0) {
+    setTimeout(() => {
+      const el = document.getElementById('coach-paycheck');
+      if (el) coachMark({
+        target: el,
+        seenKey: 'paycheck',
+        title: '여기서 입금을 확인해요',
+        text: '세입자 이름 왼쪽의 이 네모를 누르면 이번 달 입금을 “완납”으로 표시해요. 잘못 눌렀거나 취소하고 싶으면, 색칠된 네모를 다시 누른 뒤 “입금 내역”에서 휴지통(되돌리기)을 누르면 돼요.',
+      });
+    }, 500);
+  }
+
+  return view;
 }
 
 function summaryCard(total, c) {
@@ -92,11 +107,11 @@ function summaryCard(total, c) {
   );
 }
 
-function tenantRow({ tenant, st, pays, net }, month, refresh) {
+function tenantRow({ tenant, st, pays, net }, month, refresh, isFirst) {
   const boxCls = st.state === 'ok' ? 'paycheck paycheck--on'
     : st.state === 'part' ? 'paycheck paycheck--part'
     : st.state === 'bad' ? 'paycheck paycheck--bad' : 'paycheck';
-  const box = h('button', { class: boxCls, 'aria-label': '입금 상태', onClick: (e) => { e.stopPropagation(); onBox(); } }, icon('check'));
+  const box = h('button', { class: boxCls, id: isFirst ? 'coach-paycheck' : null, 'aria-label': '입금 상태', onClick: (e) => { e.stopPropagation(); onBox(); } }, icon('check'));
 
   function onBox() {
     if (st.state === 'ok' || st.state === 'part') openPaidSheet({ tenant, month, pays, refresh });

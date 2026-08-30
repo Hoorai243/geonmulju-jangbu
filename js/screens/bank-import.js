@@ -6,6 +6,7 @@ import * as store from '../store.js';
 import { matchDepositor } from '../matching.js';
 import { readBankFile } from '../bank/import.js';
 import { navigate } from '../router.js';
+import { coachMark } from '../ui/coach.js';
 
 const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
 
@@ -110,9 +111,9 @@ export async function renderBankImport() {
       navigate('/');
     };
 
-    const groupEl = (g) => {
+    const groupEl = (g, isFirst) => {
       const onlyDup = g.live.length === 0;
-      const sel = h('select', { class: 'select', style: { minHeight: '52px', fontSize: 'var(--fs-body)' }, disabled: onlyDup },
+      const sel = h('select', { class: 'select', id: isFirst ? 'coach-bank-sel' : null, style: { minHeight: '52px', fontSize: 'var(--fs-body)' }, disabled: onlyDup },
         h('option', { value: '', selected: g.decision === '' }, onlyDup ? '이미 있음 (모두)' : '건너뛰기 (이번만)'),
         h('option', { value: 'ignore', selected: g.decision === 'ignore' }, '제외 (앞으로 계속)'),
         ...tenants.map((tn) => h('option', { value: tn.id, selected: g.decision === tn.id }, `${tn.unit}호 ${tn.name}`)));
@@ -145,10 +146,19 @@ export async function renderBankImport() {
       ),
       banner('info', { text: '“확인 필요”만 골라주면 돼요. 세입자 이름과 달라도 이 세입자로 지정하면 다음부터 자동 연결돼요. 필요 없는 입금은 “제외”.' }),
       dupTotal > 0 && h('div', { class: 'muted center', style: { fontSize: 'var(--fs-sm)' } }, `이미 저장된 ${dupTotal}건은 자동으로 건너뛰어요.`),
-      h('div', { class: 'stack', style: { marginTop: '12px' } }, ...groups.map(groupEl)),
+      h('div', { class: 'stack', style: { marginTop: '12px' } }, ...groups.map((g, i) => groupEl(g, i === 0))),
       h('div', { style: { position: 'sticky', bottom: '0', padding: '12px 0', background: 'linear-gradient(transparent, var(--paper) 30%)' } }, saveBtn),
     ]);
     updateSave();
+    setTimeout(() => {
+      const el = document.getElementById('coach-bank-sel');
+      if (el) coachMark({
+        target: el,
+        seenKey: 'bankReview',
+        title: '여기서 입금을 세입자에 연결해요',
+        text: '“확인 필요”가 붙은 칸만 눌러 누구 입금인지 골라 주세요. 세입자 이름과 달라도 한 번 지정하면 다음부터 자동으로 연결돼요. 월세와 상관없는 입금은 “제외”를 고르면 돼요.',
+      });
+    }, 400);
   }
 
   return screen({ plain: true },
