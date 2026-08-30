@@ -23,9 +23,9 @@ export async function renderBankImport() {
     clear(result);
     status.textContent = '파일을 읽는 중…';
     try {
-      const txns = await readBankFile(file, 'kb');
+      const txns = await readBankFile(file);
       status.textContent = '';
-      if (!txns.length) { clear(result).appendChild(banner('warn', { title: '입금 내역이 없어요', text: '이 파일에서 “입금” 거래를 못 찾았어요. 국민은행에서 엑셀로 받은 파일이 맞는지 확인해 주세요.' })); return; }
+      if (!txns.length) { clear(result).appendChild(banner('warn', { title: '입금 내역이 없어요', text: '이 파일에서 “입금” 거래를 못 찾았어요. 엑셀로 받은 거래내역 파일이 맞는지 확인해 주세요.' })); return; }
       await review(txns);
     } catch (e) {
       status.textContent = '';
@@ -98,9 +98,9 @@ export async function renderBankImport() {
   return screen({ plain: true },
     topbar({ title: '은행 파일로 정리', back: '/more' }),
     h('div', { class: 'stack-lg' },
-      banner('info', { title: '국민은행 거래내역 파일', text: '엑셀(.xls/.xlsx)로 받은 국민은행 거래내역을 올리면, 입금만 뽑아 세입자에 자동으로 붙여드려요. (PDF·사진은 아직 못 읽어요)' }),
+      banner('info', { title: '은행 거래내역 파일 올리기', text: '엑셀(.xls/.xlsx)·CSV로 받은 거래내역을 올리면, 입금만 뽑아 세입자에 자동으로 붙여드려요. 국민은행은 검증됐고, 다른 은행도 자동으로 인식해봐요. (PDF·사진은 아직 못 읽어요)' }),
       fileInput,
-      h('button', { class: 'btn btn--primary btn--lg', onClick: () => fileInput.click() }, icon('download'), '국민은행 파일 고르기'),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: () => fileInput.click() }, icon('download'), '거래내역 파일 고르기'),
       h('button', { class: 'btn btn--ghost', onClick: () => navigate('/bank-guide') }, icon('info'), '거래내역 파일 받는 법 보기'),
       status,
       result,
