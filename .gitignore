@@ -7,3 +7,5 @@ desktop.ini
 # Capacitor(안드로이드 앱) — 다시 만들 수 있어서 저장소엔 안 넣음
 www/
 android/
+*.apk
+*.aab
