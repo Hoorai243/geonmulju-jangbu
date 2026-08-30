@@ -152,6 +152,7 @@ function openPaidSheet({ tenant, month, pays, refresh }) {
     desc: `${formatMonth(month)} 입금 내역`,
     body: (close) => h('div', { class: 'stack' },
       ...pays.map((p) => payRow(p, close)),
+      banner('info', { title: '잘못 넣었나요? (되돌리기)', text: '되돌릴 입금 오른쪽의 휴지통을 누르면 돼요. “직접 입력”은 바로, “은행 확인”은 한 번 더 확인 후 지워져요.' }),
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { close(); openConfirmForTenant({ tenant, month, onDone: refresh }); } }, icon('plus'), '입금 더 기록'),
     ),
   });

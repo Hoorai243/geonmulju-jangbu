@@ -18,6 +18,7 @@ import { renderQuickPay } from './screens/quick-pay.js'; // ⚠️ 임시 수기
 import { renderBankImport } from './screens/bank-import.js';
 import { renderBankGuide } from './screens/bank-guide.js';
 import { renderTax } from './screens/tax.js';
+import { renderHelp } from './screens/help.js';
 
 async function boot() {
   await openDB();
@@ -48,6 +49,7 @@ async function boot() {
   route('/bank-import', renderBankImport);
   route('/bank-guide', renderBankGuide);
   route('/tax', renderTax);
+  route('/help', renderHelp);
   route('/deposit', renderDepositList);
   route('/deposit/:id', renderDepositDetail);
   route('/history', renderHistory);
