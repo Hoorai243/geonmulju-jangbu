@@ -1,0 +1,162 @@
+// 이번 달 현황판 — 핵심 화면. 상태색 목록 + 입금 확인 + 미확인 입금.
+import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear } from '../util.js';
+import { icon } from '../icons.js';
+import { screen, topbar, statusChip, banner, STATUS } from '../ui/shell.js';
+import * as store from '../store.js';
+import { computeAlerts } from '../notify/notify.js';
+import { navigate } from '../router.js';
+import { openNameMatch, openConfirmForTenant } from './pay-flow.js';
+
+export async function renderDashboard({ query } = { query: {} }) {
+  const buildingId = await store.getCurrentBuildingId();
+  if (!buildingId) return noBuilding();
+  const building = await store.getBuilding(buildingId);
+  const month = query.m || monthKey();
+  const isThisMonth = month === monthKey();
+
+  const tenants = (await store.getTenants(buildingId)).filter((t) => t.status !== 'movedout');
+  const unmatched = (await store.getUnmatched(buildingId)).filter((p) => p.month === month);
+  const alerts = await computeAlerts(buildingId);
+
+  // 상태 집계
+  const rows = [];
+  const counts = { ok: 0, part: 0, bad: 0, idle: 0 };
+  for (const t of tenants) {
+    const pays = await store.getPaymentsForTenantMonth(t.id, month);
+    const st = store.paymentStatus(t, month, pays);
+    counts[st.state]++;
+    rows.push({ tenant: t, st, pays });
+  }
+
+  const refresh = () => navigate('/?m=' + month, { replace: true });
+
+  const bell = h('button', { class: 'iconbtn bell-wrap', 'aria-label': '알림', onClick: () => navigate('/notifications') },
+    icon('bell'), alerts.total > 0 && h('span', { class: 'badge' }, String(alerts.total)));
+
+  const monthNav = h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0 16px' } },
+    h('button', { class: 'iconbtn', 'aria-label': '이전 달', onClick: () => navigate('/?m=' + addMonths(month, -1)) }, icon('back')),
+    h('div', { class: 'grow center', style: { fontSize: 'var(--fs-lg)', fontWeight: 800 } }, formatMonth(month)),
+    h('button', { class: 'iconbtn', 'aria-label': '다음 달', disabled: compareMonth(month, monthKey()) >= 0, onClick: () => navigate('/?m=' + addMonths(month, 1)) }, icon('chevRight')),
+  );
+
+  return screen({ tab: '/' },
+    topbar({ title: '이번 달 현황', sub: building?.name, right: bell }),
+    monthNav,
+
+    // 요약
+    tenants.length > 0 && summaryCard(tenants.length, counts),
+
+    // 입금 확인 버튼
+    isThisMonth && tenants.length > 0 && h('button', { class: 'btn btn--primary btn--lg mt-4', onClick: () => openNameMatch({ buildingId, month, onDone: refresh }) },
+      icon('search'), '입금 확인하기'),
+
+    // 미확인 입금
+    unmatched.length > 0 && h('div', {},
+      h('div', { class: 'section-title' }, `미확인 입금 ${unmatched.length}건`),
+      h('div', { class: 'stack' }, ...unmatched.map((p) => unmatchedCard(p, tenants, refresh))),
+    ),
+
+    // 세입자 상태 목록
+    tenants.length === 0
+      ? banner('info', { title: '세입자를 먼저 등록해요', text: '“세입자” 탭에서 등록하면 여기에서 입금을 확인할 수 있어요.' })
+      : h('div', {},
+        h('div', { class: 'section-title' }, '세입자별 상태'),
+        h('div', { class: 'stack' }, ...rows.map((r) => tenantRow(r, month, refresh))),
+      ),
+  );
+}
+
+function summaryCard(total, c) {
+  const paidPct = total ? Math.round((c.ok / total) * 100) : 0;
+  return h('div', { class: 'card' },
+    h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' } },
+      h('div', { style: { fontSize: 'var(--fs-lg)', fontWeight: 700 } }, `전체 ${total}명 중 `, h('span', { style: { color: 'var(--ok-ink)' } }, `완납 ${c.ok}명`)),
+      h('div', { class: 'muted' }, `${paidPct}%`),
+    ),
+    h('div', { style: { height: '14px', background: 'var(--idle-bg)', borderRadius: '999px', overflow: 'hidden', margin: '12px 0' } },
+      h('div', { style: { width: paidPct + '%', height: '100%', background: 'var(--ok-solid)', borderRadius: '999px', transition: 'width .3s' } })),
+    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
+      c.bad > 0 && h('span', { class: 'chip chip--bad' }, h('span', { class: 'dot dot--bad' }), `미납 ${c.bad}`),
+      c.part > 0 && h('span', { class: 'chip chip--warn' }, h('span', { class: 'dot dot--warn' }), `부분 ${c.part}`),
+      c.idle > 0 && h('span', { class: 'chip chip--idle' }, h('span', { class: 'dot dot--idle' }), `미확인 ${c.idle}`),
+      c.ok > 0 && h('span', { class: 'chip chip--ok' }, h('span', { class: 'dot dot--ok' }), `완납 ${c.ok}`),
+    ),
+  );
+}
+
+function tenantRow({ tenant, st, pays }, month, refresh) {
+  const boxCls = st.state === 'ok' ? 'paycheck paycheck--on'
+    : st.state === 'part' ? 'paycheck paycheck--part'
+    : st.state === 'bad' ? 'paycheck paycheck--bad' : 'paycheck';
+  const box = h('button', { class: boxCls, 'aria-label': '입금 상태', onClick: (e) => { e.stopPropagation(); onBox(); } }, icon('check'));
+
+  function onBox() {
+    if (st.state === 'ok' || st.state === 'part') openPaidSheet({ tenant, month, pays, refresh });
+    else openConfirmForTenant({ tenant, month, prefillAmount: st.remaining, onDone: refresh });
+  }
+
+  return h('div', { class: 'rowcard' },
+    box,
+    h('button', { class: 'rowcard__main', style: { background: 'none', border: 'none', font: 'inherit', textAlign: 'left', padding: 0, cursor: 'pointer' }, onClick: () => navigate('/tenant/' + tenant.id) },
+      h('div', { class: 'rowcard__title' }, `${tenant.unit}호 ${tenant.name}`),
+      h('div', { class: 'rowcard__meta' },
+        st.state === 'ok' ? `완납 · ${won(st.paid)}원`
+          : st.state === 'part' ? `${won(st.paid)}원 받음 · 남은 ${won(st.remaining)}원`
+          : `청구 ${won(st.due)}원`),
+    ),
+    h('div', { class: 'rowcard__right' }, statusChip(st.state)),
+  );
+}
+
+// 이미 낸 세입자 박스 눌렀을 때: 내역 + 되돌리기 + 추가입금
+function openPaidSheet({ tenant, month, pays, refresh }) {
+  openSheet({
+    title: `${tenant.unit}호 ${tenant.name}`,
+    desc: `${formatMonth(month)} 입금 내역`,
+    body: (close) => h('div', { class: 'stack' },
+      ...pays.map((p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+        h('div', { class: 'grow' },
+          h('div', { class: 'amount won', style: { fontWeight: 800 } }, won(p.amount)),
+          h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${p.depositorName || '입금자 미상'} · ${p.paidAt}`)),
+        h('button', { class: 'iconbtn', 'aria-label': '이 입금 지우기', onClick: async () => { await store.deletePayment(p.id); close(); toast('입금 기록을 지웠어요'); refresh(); } }, icon('trash')),
+      )),
+      h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { close(); openConfirmForTenant({ tenant, month, onDone: refresh }); } }, icon('plus'), '입금 더 기록'),
+    ),
+  });
+}
+
+function unmatchedCard(p, tenants, refresh) {
+  const assign = () => openSheet({
+    title: '이 입금은 누구인가요?',
+    desc: `입금자명: ${p.depositorName || '(없음)'} · ${won(p.amount)}원`,
+    body: (close) => {
+      const sel = h('select', { class: 'select' },
+        h('option', { value: '' }, '세입자 선택…'),
+        ...tenants.map((t) => h('option', { value: t.id }, `${t.unit}호 ${t.name}`)));
+      return h('div', { class: 'stack' },
+        sel,
+        h('button', {
+          class: 'btn btn--primary btn--lg', onClick: async () => {
+            const t = tenants.find((x) => x.id === sel.value);
+            if (!t) return toast('세입자를 선택해 주세요.', 'bad');
+            await store.updatePayment(p.id, { tenantId: t.id });
+            close(); toast('세입자에 연결했어요', 'ok'); refresh();
+          },
+        }, icon('check'), '이 세입자로 연결'),
+        h('button', { class: 'btn btn--ghost', onClick: async () => { await store.deletePayment(p.id); close(); toast('삭제했어요'); refresh(); } }, icon('trash'), '이 입금 삭제'),
+      );
+    },
+  });
+  return h('button', { class: 'rowcard', style: { borderColor: 'var(--warn-solid)' }, onClick: assign },
+    h('div', { style: { width: '40px', height: '40px', flex: 'none', borderRadius: '10px', background: 'var(--warn-bg)', color: 'var(--warn-ink)', display: 'grid', placeItems: 'center' } }, icon('receipt')),
+    h('div', { class: 'rowcard__main' },
+      h('div', { class: 'rowcard__title' }, p.depositorName || '입금자 미상'),
+      h('div', { class: 'rowcard__meta' }, `${won(p.amount)}원 · 눌러서 세입자 연결`)),
+    h('span', { class: 'rowcard__chev' }, icon('chevRight')),
+  );
+}
+
+function noBuilding() {
+  return screen({ plain: true },
+    banner('info', { title: '건물이 없어요', text: '앱을 다시 시작해 건물을 등록해 주세요.' }));
+}
