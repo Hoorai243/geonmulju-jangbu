@@ -14,6 +14,7 @@ import { renderDepositList, renderDepositDetail } from './screens/deposit.js';
 import { renderHistory } from './screens/history.js';
 import { renderNotifications } from './screens/notifications.js';
 import { renderMore, renderAccounts, renderSecurity, renderNotifySettings } from './screens/more.js';
+import { renderQuickPay } from './screens/quick-pay.js'; // ⚠️ 임시 수기 도우미
 
 async function boot() {
   await openDB();
@@ -40,6 +41,7 @@ async function boot() {
   route('/tenant/new', renderTenantForm);
   route('/tenant/:id', renderTenantDetail);
   route('/tenant/:id/edit', renderTenantForm);
+  route('/quick-pay', renderQuickPay); // ⚠️ 임시 수기 도우미(자동연동 시 제거 후보)
   route('/deposit', renderDepositList);
   route('/deposit/:id', renderDepositDetail);
   route('/history', renderHistory);
