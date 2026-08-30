@@ -22,10 +22,11 @@ export async function renderDashboard({ query } = { query: {} }) {
   const rows = [];
   const counts = { ok: 0, part: 0, bad: 0, idle: 0 };
   for (const t of tenants) {
-    const pays = await store.getPaymentsForTenantMonth(t.id, month);
-    const st = store.paymentStatus(t, month, pays);
+    const led = await store.tenantLedger(t, month);            // 선납 이월 반영
+    const st = led.map.get(month) || { state: 'idle', due: 0, paid: 0, remaining: 0, carried: false };
     counts[st.state]++;
-    rows.push({ tenant: t, st, pays });
+    const pays = await store.getPaymentsForTenantMonth(t.id, month);
+    rows.push({ tenant: t, st, pays, net: led.net });
   }
 
   const refresh = () => navigate('/?m=' + month, { replace: true });
@@ -91,7 +92,7 @@ function summaryCard(total, c) {
   );
 }
 
-function tenantRow({ tenant, st, pays }, month, refresh) {
+function tenantRow({ tenant, st, pays, net }, month, refresh) {
   const boxCls = st.state === 'ok' ? 'paycheck paycheck--on'
     : st.state === 'part' ? 'paycheck paycheck--part'
     : st.state === 'bad' ? 'paycheck paycheck--bad' : 'paycheck';
@@ -107,11 +108,15 @@ function tenantRow({ tenant, st, pays }, month, refresh) {
     h('button', { class: 'rowcard__main', style: { background: 'none', border: 'none', font: 'inherit', textAlign: 'left', padding: 0, cursor: 'pointer' }, onClick: () => navigate('/tenant/' + tenant.id) },
       h('div', { class: 'rowcard__title' }, `${tenant.unit}호 ${tenant.name}`),
       h('div', { class: 'rowcard__meta' },
-        st.state === 'ok' ? `완납 · ${won(st.paid)}원`
-          : st.state === 'part' ? `${won(st.paid)}원 받음 · 남은 ${won(st.remaining)}원`
-          : `청구 ${won(st.due)}원`),
+        st.carried ? '완납 · 지난 선납으로 채움'
+          : st.state === 'ok' ? `완납 · ${won(st.paid)}원`
+            : st.state === 'part' ? `${won(st.avail || st.paid)}원 받음 · 남은 ${won(st.remaining)}원`
+              : `청구 ${won(st.due)}원`),
     ),
-    h('div', { class: 'rowcard__right' }, statusChip(st.state)),
+    h('div', { class: 'rowcard__right', style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' } },
+      statusChip(st.state),
+      net < 0 ? h('span', { class: 'chip chip--bad', style: { fontSize: '0.78rem', padding: '2px 8px' } }, `밀림 ${won(-net)}`)
+        : net > 0 ? h('span', { class: 'chip chip--info', style: { fontSize: '0.78rem', padding: '2px 8px' } }, `선납 ${won(net)}`) : null),
   );
 }
 

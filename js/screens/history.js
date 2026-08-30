@@ -12,12 +12,12 @@ export async function renderHistory() {
 
   const items = [];
   for (const t of tenants) {
-    const late = await store.lateCount(t);
+    const carry = await store.tenantLedger(t, month);
+    const late = await store.lateCountCarry(t);
     const mini = [];
     for (let i = 5; i >= 0; i--) {
       const m = addMonths(month, -i);
-      const mp = await store.getPaymentsForTenantMonth(t.id, m);
-      mini.push({ m, s: store.paymentStatus(t, m, mp).state });
+      mini.push({ m, s: (carry.map.get(m) || { state: 'idle' }).state });
     }
     items.push({ t, late, mini });
   }

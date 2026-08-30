@@ -44,9 +44,9 @@ export async function computeAlerts(buildingId, today = monthKey()) {
     const on = store.effectiveNotify(t, defaults);
     // 미납(이번 달) — 납기일+3 지났는데 완납 아님
     if (defaults.unpaid && on) {
-      const pays = await store.getPaymentsForTenantMonth(t.id, today);
-      const st = store.paymentStatus(t, today, pays);
-      if (st.state === 'bad' || (st.state === 'part' && store.isOverdue(t, today))) {
+      const led = await store.tenantLedger(t, today);   // 선납 이월 반영
+      const st = led.map.get(today);
+      if (st && (st.state === 'bad' || (st.state === 'part' && store.isOverdue(t, today)))) {
         unpaid.push({ tenant: t, month: today, remaining: st.remaining, state: st.state });
       }
     }

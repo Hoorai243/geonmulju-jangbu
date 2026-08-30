@@ -11,12 +11,13 @@ export async function renderTenantDetail({ params }) {
   const t = await store.getTenant(params.id);
   if (!t) { navigate('/tenants', { replace: true }); return h('div'); }
   const month = monthKey();
-  const pays = await store.getPaymentsForTenantMonth(t.id, month);
-  const st = store.paymentStatus(t, month, pays);
+  const carry = await store.tenantLedger(t, month);          // 선납 이월 반영
+  const st = carry.map.get(month) || { state: 'idle', due: 0, paid: 0, avail: 0, remaining: 0, carried: false };
+  const net = carry.net;                                     // +선납 / -밀림
   const rate = store.ratesForMonth(t, month);
   const ledger = await store.getLedger(t.id);
   const dep = store.depositSummary(ledger);
-  const late = await store.lateCount(t);
+  const late = await store.lateCountCarry(t);
   const defaults = await store.getNotifyDefaults();
   const refresh = () => navigate('/tenant/' + t.id, { replace: true });
 
@@ -24,9 +25,7 @@ export async function renderTenantDetail({ params }) {
   const mini = [];
   for (let i = 5; i >= 0; i--) {
     const m = addMonths(month, -i);
-    const mp = await store.getPaymentsForTenantMonth(t.id, m);
-    const ms = store.paymentStatus(t, m, mp);
-    mini.push({ m, s: ms.state });
+    mini.push({ m, s: (carry.map.get(m) || { state: 'idle' }).state });
   }
 
   return screen({ plain: true },
@@ -44,6 +43,8 @@ export async function renderTenantDetail({ params }) {
           h('span', { class: 'chip chip--info' }, t.kind === 'shop' ? '상가' : '주택'),
           t.businessName && h('span', { class: 'chip chip--idle' }, t.businessName),
           late > 0 && h('span', { class: 'chip chip--bad' }, `지금까지 ${late}번 밀림`),
+          net > 0 && h('span', { class: 'chip chip--info' }, `미리 냄 ${won(net)}원`),
+          net < 0 && h('span', { class: 'chip chip--bad' }, `밀린 돈 ${won(-net)}원`),
         ),
         h('dl', { class: 'deflist' },
           dt('계약 기간'), dd(`${formatMonth(t.contractStart)} ~ ${t.contractEnd ? formatMonth(t.contractEnd) : '미정'}`),
@@ -66,8 +67,9 @@ export async function renderTenantDetail({ params }) {
           statusChip(st.state)),
         h('div', { class: 'mt-4', style: { display: 'flex', justifyContent: 'space-between' } },
           h('span', { class: 'muted' }, '청구'), h('span', { class: 'amount won' }, won(rate.total))),
-        st.paid > 0 && h('div', { class: 'mt-2', style: { display: 'flex', justifyContent: 'space-between', color: 'var(--ok-ink)' } },
-          h('span', {}, '받음'), h('span', { class: 'amount won' }, won(st.paid))),
+        st.carried && h('div', { class: 'mt-2', style: { color: 'var(--ok-ink)', fontSize: 'var(--fs-sm)' } }, '지난달 선납으로 채워졌어요'),
+        (st.avail > 0 && !st.carried) && h('div', { class: 'mt-2', style: { display: 'flex', justifyContent: 'space-between', color: 'var(--ok-ink)' } },
+          h('span', {}, '받음'), h('span', { class: 'amount won' }, won(st.avail))),
         st.remaining > 0 && st.state !== 'idle' && h('div', { class: 'mt-2', style: { display: 'flex', justifyContent: 'space-between', color: 'var(--bad-ink)' } },
           h('span', {}, '남음'), h('span', { class: 'amount won' }, won(st.remaining))),
         h('button', { class: 'btn btn--primary btn--block mt-4', onClick: () => openConfirmForTenant({ tenant: t, month, prefillAmount: st.remaining || rate.total, onDone: refresh }) },

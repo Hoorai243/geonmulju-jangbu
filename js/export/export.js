@@ -271,11 +271,11 @@ async function buildingRows(buildingId, month) {
   const tenants = (await store.getTenants(buildingId)).filter((t) => t.status !== 'movedout');
   const rows = []; let due = 0, paid = 0, ok = 0, bad = 0;
   for (const t of tenants) {
-    const ps = await store.getPaymentsForTenantMonth(t.id, month);
-    const s = store.paymentStatus(t, month, ps);
-    due += s.due; paid += s.paid;
+    const led = await store.tenantLedger(t, month);
+    const s = led.map.get(month) || { state: 'idle', due: 0, avail: 0 };
+    due += s.due; paid += Math.min(s.avail || 0, s.due);
     if (s.state === 'ok') ok++; else if (s.state === 'bad') bad++;
-    rows.push({ unit: t.unit, name: t.name, due: s.due, paid: s.paid, state: s.state });
+    rows.push({ unit: t.unit, name: t.name, due: s.due, paid: Math.min(s.avail || 0, s.due), state: s.state });
   }
   return { building, rows, due, paid, ok, bad, count: tenants.length };
 }

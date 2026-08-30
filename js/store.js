@@ -296,6 +296,44 @@ export async function lateCount(tenant, uptoMonth = monthKey()) {
   return count;
 }
 
+// 선납/후납 반영 정산 — 넘치게 낸 달의 돈이 다음 달로 이월되고,
+// 전체 순액(net: +선납 / -밀림)도 계산. upto 달까지.
+export async function tenantLedger(tenant, upto = monthKey()) {
+  const start = tenant.rentHistory?.[0]?.from || tenant.contractStart;
+  const moved = tenant.status === 'movedout' && tenant.movedOutAt ? monthKey(new Date(tenant.movedOutAt)) : null;
+  const end = moved && compareMonth(moved, upto) < 0 ? moved : upto;
+  const pays = await getAllPaymentsForTenant(tenant.id);
+  const byMonth = {};
+  for (const p of pays) byMonth[p.month] = (byMonth[p.month] || 0) + (Number(p.amount) || 0);
+  const map = new Map();
+  const today = todayISO();
+  let credit = 0, net = 0, m = start, guard = 0;
+  while (start && compareMonth(m, end) <= 0 && guard++ < 800) {
+    const due = ratesForMonth(tenant, m).total;
+    const paid = byMonth[m] || 0;
+    const avail = credit + paid;         // 이월된 선납 + 이 달 입금
+    let state;
+    if (due <= 0) state = paid > 0 ? 'ok' : 'idle';
+    else if (avail >= due) state = 'ok';
+    else if (avail > 0) state = 'part';
+    else state = isOverdue(tenant, m, today) ? 'bad' : 'idle';
+    map.set(m, { state, due, paid, avail, remaining: due > 0 ? Math.max(0, due - avail) : 0, carried: due > 0 && paid < due && avail >= due });
+    credit = Math.max(0, avail - due);   // 남은 선납 다음 달로 이월
+    net += paid - due;                   // 전체 순액(+선납 / -밀림)
+    m = addMonths(m, 1);
+  }
+  return { map, net, credit };
+}
+
+// upto까지 밀린 횟수(선납 이월 반영). 완납 못한 달 수.
+export async function lateCountCarry(tenant, upto = monthKey()) {
+  const last = addMonths(upto, -1); // 이번 달은 진행 중일 수 있어 제외
+  const { map } = await tenantLedger(tenant, last);
+  let n = 0;
+  for (const [, s] of map) if (s.due > 0 && s.state !== 'ok') n++;
+  return n;
+}
+
 /* ================= 보증금(deposit_ledger) ================= */
 // { id, tenantId, type:'in'|'deduct'|'refund', amount, category, memo, date, createdAt }
 export async function getLedger(tenantId) {
