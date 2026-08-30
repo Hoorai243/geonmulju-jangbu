@@ -29,6 +29,22 @@
     </div>
   </noscript>
 
+  <!-- 안전장치 — 시작 중 오류가 나면 흰 화면 대신 오류를 보여준다. -->
+  <script>
+    (function () {
+      function show(msg) {
+        var el = document.getElementById('app');
+        if (!el || el.childElementCount > 0) return; // 이미 화면이 그려졌으면 건드리지 않음
+        el.innerHTML = '<div style="padding:20px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:#8a1c1c;font-family:monospace">[앱 오류]\n' + String(msg) + '</div>';
+      }
+      window.addEventListener('error', function (e) {
+        show((e.message || e.type) + '\n' + (e.filename || '') + ' : ' + (e.lineno || '') + '\n' + ((e.error && e.error.stack) || ''));
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e.reason; show('promise 오류\n' + ((r && (r.stack || r.message)) || r));
+      });
+    })();
+  </script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

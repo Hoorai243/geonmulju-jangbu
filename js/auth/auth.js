@@ -49,19 +49,50 @@ export function isUnlocked() { return sessionStorage.getItem(SESSION_KEY) === '1
 export function unlock() { sessionStorage.setItem(SESSION_KEY, '1'); }
 export function lock() { sessionStorage.removeItem(SESSION_KEY); }
 
-/* ---------- 지문/생체 (WebAuthn, 이 기기 전용) ---------- */
+/* ---------- 지문/생체 ---------- */
 // 서버 없이 "이 기기에서 생체확인이 되면 잠금 해제"로 사용.
+// 웹/홈화면(PWA): WebAuthn. 안드로이드 앱(WebView): 네이티브 지문(BiometricPrompt) — WebView 는 WebAuthn 미지원.
+
+// 안드로이드 앱에서만 BiometricAuth 플러그인(브리지) 반환, 아니면 falsy
+function nativeBio() {
+  const c = typeof window !== 'undefined' ? window.Capacitor : undefined;
+  if (!(c && c.isNativePlatform && c.isNativePlatform())) return null;
+  // 브리지에 등록된 네이티브 플러그인 이름은 'BiometricAuthNative' (JS 래퍼 없이 직접 호출)
+  return (c.Plugins && c.Plugins.BiometricAuthNative) || null;
+}
+const nativeAuthOpts = (reason) => ({
+  reason,
+  androidTitle: '건물주 장부',
+  androidSubtitle: reason,
+  cancelTitle: '취소',
+  allowDeviceCredential: true, // 지문 실패 시 폰 잠금(PIN/패턴)으로도 확인 가능
+});
+
 export function biometricSupported() {
+  if (nativeBio()) return true;
   return !!(window.PublicKeyCredential && navigator.credentials);
 }
 export async function biometricAvailable() {
+  const nb = nativeBio();
+  if (nb) { try { const r = await nb.checkBiometry(); return !!(r && (r.isAvailable || r.strongBiometryIsAvailable)); } catch { return false; } }
   if (!biometricSupported()) return false;
   try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
   catch { return false; }
 }
-export async function hasBiometric() { return !!(await db.metaGet('webauthn')); }
+export async function hasBiometric() {
+  if (nativeBio()) return !!(await db.metaGet('biometric-native'));
+  return !!(await db.metaGet('webauthn'));
+}
 
 export async function registerBiometric(displayName = '건물주') {
+  const nb = nativeBio();
+  if (nb) {
+    const r = await nb.checkBiometry();
+    if (!(r && (r.isAvailable || r.strongBiometryIsAvailable))) throw new Error('이 기기에서 지문/생체를 쓸 수 없어요. 휴대폰 설정에서 지문을 먼저 등록해 주세요.');
+    await nb.internalAuthenticate(nativeAuthOpts('앱 잠금 해제에 쓸 지문을 등록해요'));
+    await db.metaSet('biometric-native', { createdAt: new Date().toISOString() });
+    return true;
+  }
   if (!biometricSupported()) throw new Error('이 기기는 지문/생체 등록을 지원하지 않아요.');
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userId = crypto.getRandomValues(new Uint8Array(16));
@@ -82,6 +113,13 @@ export async function registerBiometric(displayName = '건물주') {
 }
 
 export async function loginBiometric() {
+  const nb = nativeBio();
+  if (nb) {
+    if (!(await db.metaGet('biometric-native'))) throw new Error('등록된 지문/생체가 없어요.');
+    await nb.internalAuthenticate(nativeAuthOpts('앱 잠금을 풀어요')); // 실패/취소 시 예외
+    unlock();
+    return true;
+  }
   const rec = await db.metaGet('webauthn');
   if (!rec) throw new Error('등록된 지문/생체가 없어요.');
   const challenge = crypto.getRandomValues(new Uint8Array(32));
@@ -98,4 +136,7 @@ export async function loginBiometric() {
   return true;
 }
 
-export async function removeBiometric() { await db.del('meta', 'webauthn'); }
+export async function removeBiometric() {
+  if (nativeBio()) { await db.del('meta', 'biometric-native'); return; }
+  await db.del('meta', 'webauthn');
+}

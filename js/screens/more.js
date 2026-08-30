@@ -9,6 +9,7 @@ import { navigate } from '../router.js';
 import { exportBuildingExcel, exportBuildingImage } from '../export/export.js';
 import { requireAuth } from '../ui/authgate.js';
 import { isNative, ensureMonthEndReminder, cancelMonthEndReminder } from '../notify/native.js';
+import { saveFile } from '../export/save-file.js';
 
 /* ---------- 더보기 메뉴 ---------- */
 export async function renderMore() {
@@ -54,7 +55,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.18.1'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.19.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -76,10 +77,7 @@ function editBuilding(building) {
 async function backup() {
   const data = await db.exportAll();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `건물주장부_백업_${monthKey()}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  toast('백업 파일을 저장했어요', 'ok');
+  await saveFile(`건물주장부_백업_${monthKey()}.json`, blob);
 }
 function restore() {
   const input = h('input', { type: 'file', accept: 'application/json,.json', style: { display: 'none' } });

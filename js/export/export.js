@@ -4,6 +4,7 @@
 import * as store from './../store.js';
 import { won, formatMonth, monthKey, addMonths, compareMonth, todayISO, toast } from '../util.js';
 import { STATUS } from '../ui/shell.js';
+import { saveFile } from './save-file.js';
 
 /* ================= 팔레트 ================= */
 const C = {
@@ -16,12 +17,9 @@ const argb = (h) => 'FF' + h;
 const stColor = (s) => ({ ok: C.ok, part: C.warn, bad: C.bad, idle: C.idle }[s] || C.idle);
 
 /* ================= 공통 ================= */
+// 웹: 브라우저 다운로드 / 앱: 파일 저장 후 공유창 (save-file.js 가 알아서 처리 + 안내)
 function download(filename, blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  return saveFile(filename, blob);
 }
 
 // ExcelJS 를 필요할 때만 로드(전역 UMD)
@@ -98,7 +96,7 @@ function cell(ctx, text, x, y, w, h, { align = 'left', color = C.ink, font = FON
   ctx.textAlign = 'left';
 }
 function saveCanvas(cv, filename) {
-  cv.toBlob((b) => { download(filename, b); toast('이미지를 내려받았어요', 'ok'); }, 'image/png');
+  cv.toBlob((b) => { download(filename, b); }, 'image/png');
 }
 
 const TCOLS = [
