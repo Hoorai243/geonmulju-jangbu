@@ -30,6 +30,8 @@ export async function renderTenantForm({ params }) {
 
   const businessName = h('input', { class: 'input', placeholder: '예: ○○카페 (선택)', value: t?.businessName || '' });
   const bizNo = h('input', { class: 'input', placeholder: '예: 123-45-67890 (선택)', value: t?.bizNo || '', inputmode: 'numeric' });
+  const vatCb = h('input', { type: 'checkbox', checked: !!t?.vat });
+  const vatSwitch = h('label', { class: 'switch' }, vatCb, h('span', { class: 'switch__track' }));
   const phone = h('input', { class: 'input', type: 'tel', placeholder: '010-0000-0000 (선택)', value: t?.phone || '', inputmode: 'numeric' });
 
   const rent = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', placeholder: '0', value: baseRate.rent ? baseRate.rent.toLocaleString('ko-KR') : '' }));
@@ -89,6 +91,7 @@ export async function renderTenantForm({ params }) {
       unit: unit.value, name: name.value, kind,
       businessName: kind === 'shop' ? businessName.value : '',
       bizNo: kind === 'shop' ? bizNo.value : '',
+      vat: kind === 'shop' ? vatCb.checked : false,
       phone: phone.value,
       deposit: parseNum(deposit.value),
       dueDay: Number(dueDay.value),
@@ -116,6 +119,12 @@ export async function renderTenantForm({ params }) {
       (() => { shopFields.appendChild(h('div', { class: 'stack' },
         field('사업 이름', businessName, '선택'),
         field('사업자등록번호', bizNo, '선택'),
+        h('div', { class: 'card' },
+          h('div', { class: 'settingrow', style: { padding: 0 } },
+            h('div', { class: 'settingrow__main' },
+              h('div', { class: 'settingrow__title' }, '부가세 받기 (세금계산서)'),
+              h('div', { class: 'settingrow__desc' }, '켜면 월세·관리비에 부가세 10%를 더해 청구하고, 세금계산서 정리에 넣어요')),
+            vatSwitch)),
       )); return shopFields; })(),
       field('휴대폰 번호', phone, '선택', '미납 안내 문자를 보낼 때만 써요. (주민번호·계좌번호는 받지 않아요)'),
       banner('info', { text: '관리비에는 수도세·전기세를 포함해 매달 고정 금액으로 넣어요. 나중에 달라지면 “요금 변경”으로 바꿀 수 있어요.' }),

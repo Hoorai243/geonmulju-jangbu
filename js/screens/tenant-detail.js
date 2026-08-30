@@ -52,6 +52,7 @@ export async function renderTenantDetail({ params }) {
           ...(() => { const w = store.waterConfig(t, month); return w.cycle !== 'none' && w.amount > 0
             ? [dt('수도세'), dd(`${won(w.amount)}원 · ${w.cycle === 'monthly' ? '매월' : '격월(' + (w.parity === 'even' ? '짝수달' : '홀수달') + ')'}`)]
             : []; })(),
+          ...(t.vat ? [dt('부가세'), dd(`${won(rate.vat)}원 (10%) · 청구 ${won(rate.total)}원`)] : []),
           dt('납기일'), dd(`매월 ${t.dueDay || 1}일`),
           t.phone ? dt('휴대폰') : null, t.phone ? dd(t.phone) : null,
           t.bizNo ? dt('사업자번호') : null, t.bizNo ? dd(t.bizNo) : null,

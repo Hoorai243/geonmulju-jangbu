@@ -331,6 +331,48 @@ export async function exportBuildingImage(buildingId, month = monthKey()) {
   saveCanvas(cv, `납부현황_${rep.building?.name || '건물'}_${month}.png`);
 }
 
+// 부가세·세금계산서 정리 엑셀
+export async function exportTaxExcel(buildingId, months, periodLabel) {
+  let EJS;
+  try { EJS = await loadExcelJS(); } catch (e) { return toast(e.message, 'bad'); }
+  const building = await store.getBuilding(buildingId);
+  const { rows, totals } = await store.taxSummary(buildingId, months);
+  const wb = new EJS.Workbook();
+  const ws = wb.addWorksheet('부가세', { views: [{ showGridLines: false }], pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  ws.columns = [{ width: 8 }, { width: 16 }, { width: 18 }, { width: 15 }, { width: 13 }, { width: 15 }];
+  const FMT = '#,##0"원"';
+
+  ws.mergeCells('A1:F1'); ws.getRow(1).height = 40;
+  styleCell(ws.getCell('A1'), { fill: C.navy, font: { size: 16, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: 'center' } });
+  ws.getCell('A1').value = `${building?.name || '건물'} · 부가세·세금계산서 (${periodLabel})`;
+  ws.getRow(2).height = 24;
+  ['호실', '이름', '사업자번호', '공급가액', '부가세', '합계'].forEach((hh, i) => {
+    const c = ws.getRow(2).getCell(i + 1);
+    styleCell(c, { fill: C.teal, font: { size: 11, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: i >= 3 ? 'right' : i === 1 ? 'left' : 'center' } });
+    c.value = hh;
+  });
+  let r = 3;
+  rows.forEach((row, idx) => {
+    const R = ws.getRow(r); R.height = 20; const z = idx % 2 === 0 ? C.white : C.zebra;
+    styleCell(R.getCell(1), { fill: z, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); R.getCell(1).value = row.tenant.unit;
+    styleCell(R.getCell(2), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'left' } }); R.getCell(2).value = row.tenant.name;
+    styleCell(R.getCell(3), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); R.getCell(3).value = row.tenant.bizNo || '';
+    styleCell(R.getCell(4), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(4).value = row.supply;
+    styleCell(R.getCell(5), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(5).value = row.vat;
+    styleCell(R.getCell(6), { fill: z, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(6).value = row.total;
+    r++;
+  });
+  const R = ws.getRow(r); R.height = 26; ws.mergeCells(r, 1, r, 3);
+  styleCell(R.getCell(1), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'left' } }); R.getCell(1).value = '합계';
+  styleCell(R.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(4).value = totals.supply;
+  styleCell(R.getCell(5), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.teal) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(5).value = totals.vat;
+  styleCell(R.getCell(6), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(6).value = totals.total;
+
+  const buf = await wb.xlsx.writeBuffer();
+  download(`부가세_${building?.name || '건물'}_${periodLabel}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  toast('엑셀 파일을 내려받았어요', 'ok');
+}
+
 export async function exportBuildingExcel(buildingId, month = monthKey()) {
   let EJS;
   try { EJS = await loadExcelJS(); } catch (e) { return toast(e.message, 'bad'); }

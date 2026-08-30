@@ -62,6 +62,7 @@ export async function saveTenant(data) {
     businessName: data.businessName?.trim() || '',
     kind: data.kind === 'shop' ? 'shop' : 'house',
     bizNo: data.bizNo?.trim() || '',
+    vat: data.kind === 'shop' ? !!data.vat : false,   // 상가 부가세(세금계산서) 발행 여부
     phone: data.phone?.trim() || '',
     deposit: Number(data.deposit) || 0,
     dueDay: Math.min(28, Math.max(1, Number(data.dueDay) || 1)),
@@ -102,12 +103,26 @@ export async function deleteRateChange(tenantId, from) {
 export function ratesForMonth(tenant, month) {
   const hist = [...(tenant.rentHistory || [])].sort((a, b) => compareMonth(a.from, b.from));
   const start = hist[0]?.from || tenant.contractStart;
-  if (start && compareMonth(month, start) < 0) return { rent: 0, fee: 0, water: 0, waterCharged: false, total: 0 };
+  if (start && compareMonth(month, start) < 0) return { rent: 0, fee: 0, water: 0, waterCharged: false, supply: 0, vat: 0, total: 0 };
   let cur = hist[0] || { rent: 0, fee: 0 };
   for (const h of hist) { if (compareMonth(h.from, month) <= 0) cur = h; }
   const rent = Number(cur.rent) || 0, fee = Number(cur.fee) || 0;
   const water = waterForMonth(cur, month);
-  return { rent, fee, water, waterCharged: water > 0, total: rent + fee + water };
+  const supply = rent + fee + water;                       // 공급가액(부가세 별도)
+  const vat = tenant.vat ? Math.round(supply / 10) : 0;    // 상가 부가세 10%
+  return { rent, fee, water, waterCharged: water > 0, supply, vat, total: supply + vat };
+}
+
+// 부가세·세금계산서 정리: 여러 달에 걸친 상가(부가세) 세입자별 공급가액/부가세 합
+export async function taxSummary(buildingId, months) {
+  const tenants = (await getTenants(buildingId)).filter((t) => t.kind === 'shop' && t.vat);
+  const rows = tenants.map((t) => {
+    let supply = 0, vat = 0;
+    for (const m of months) { const r = ratesForMonth(t, m); supply += r.supply; vat += r.vat; }
+    return { tenant: t, supply, vat, total: supply + vat };
+  }).filter((r) => r.supply > 0);
+  const totals = rows.reduce((a, r) => ({ supply: a.supply + r.supply, vat: a.vat + r.vat, total: a.total + r.total }), { supply: 0, vat: 0, total: 0 });
+  return { rows, totals };
 }
 
 // 이 달에 부과되는 수도세 금액(격월이면 해당 달이 아닐 때 0)

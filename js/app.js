@@ -17,6 +17,7 @@ import { renderMore, renderAccounts, renderSecurity, renderNotifySettings } from
 import { renderQuickPay } from './screens/quick-pay.js'; // ⚠️ 임시 수기 도우미
 import { renderBankImport } from './screens/bank-import.js';
 import { renderBankGuide } from './screens/bank-guide.js';
+import { renderTax } from './screens/tax.js';
 
 async function boot() {
   await openDB();
@@ -46,6 +47,7 @@ async function boot() {
   route('/quick-pay', renderQuickPay); // ⚠️ 임시 수기 도우미(자동연동 시 제거 후보)
   route('/bank-import', renderBankImport);
   route('/bank-guide', renderBankGuide);
+  route('/tax', renderTax);
   route('/deposit', renderDepositList);
   route('/deposit/:id', renderDepositDetail);
   route('/history', renderHistory);

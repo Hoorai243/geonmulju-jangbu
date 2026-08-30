@@ -32,6 +32,7 @@ export async function renderMore() {
         h('div', { class: 'linklist' },
           link('download', '은행 파일로 입금 정리', () => navigate('/bank-import')),
           link('info', '거래내역 받는 법 (은행별)', () => navigate('/bank-guide')),
+          link('receipt', '부가세 · 세금계산서 (상가)', () => navigate('/tax')),
           link('history', '지난 이력 · 밀린 횟수', () => navigate('/history')),
           link('bank', '입금받는 계좌 관리', () => navigate('/accounts')),
           link('building', '건물 정보 수정', () => editBuilding(building)),
@@ -50,7 +51,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.9.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.10.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
