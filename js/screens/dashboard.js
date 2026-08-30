@@ -1,5 +1,5 @@
 // 이번 달 현황판 — 핵심 화면. 상태색 목록 + 입금 확인 + 미확인 입금.
-import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear } from '../util.js';
+import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear, append } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, statusChip, banner, STATUS } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -115,18 +115,38 @@ function tenantRow({ tenant, st, pays }, month, refresh) {
   );
 }
 
+// 출처 배지: 은행 확인 / 직접 입력
+export function sourceBadge(source) {
+  return source === 'bank'
+    ? h('span', { class: 'chip chip--info' }, icon('bank', { size: 14 }), '은행 확인')
+    : h('span', { class: 'chip chip--idle' }, icon('edit', { size: 14 }), '직접 입력');
+}
+
 // 이미 낸 세입자 박스 눌렀을 때: 내역 + 되돌리기 + 추가입금
 function openPaidSheet({ tenant, month, pays, refresh }) {
+  const payRow = (p, close) => {
+    const card = h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } });
+    const doDelete = async () => { await store.deletePayment(p.id); close(); toast('되돌렸어요'); refresh(); };
+    const normal = () => { clear(card); append(card, [
+      h('div', { class: 'grow' },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+          h('span', { class: 'amount won', style: { fontWeight: 800 } }, won(p.amount)), sourceBadge(p.source)),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${p.depositorName || '입금자 미상'} · ${p.paidAt}`)),
+      h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: () => (p.source === 'bank' ? askDelete() : doDelete()) }, icon('trash')),
+    ]); };
+    const askDelete = () => { clear(card); append(card, [
+      h('div', { class: 'grow', style: { fontSize: 'var(--fs-sm)' } }, '은행에서 확인된 기록이에요. 그래도 지울까요?'),
+      h('button', { class: 'btn btn--secondary', style: { minHeight: '44px' }, onClick: normal }, '취소'),
+      h('button', { class: 'btn btn--danger', style: { minHeight: '44px' }, onClick: doDelete }, '지우기'),
+    ]); };
+    normal();
+    return card;
+  };
   openSheet({
     title: `${tenant.unit}호 ${tenant.name}`,
     desc: `${formatMonth(month)} 입금 내역`,
     body: (close) => h('div', { class: 'stack' },
-      ...pays.map((p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-        h('div', { class: 'grow' },
-          h('div', { class: 'amount won', style: { fontWeight: 800 } }, won(p.amount)),
-          h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${p.depositorName || '입금자 미상'} · ${p.paidAt}`)),
-        h('button', { class: 'iconbtn', 'aria-label': '이 입금 지우기', onClick: async () => { await store.deletePayment(p.id); close(); toast('입금 기록을 지웠어요'); refresh(); } }, icon('trash')),
-      )),
+      ...pays.map((p) => payRow(p, close)),
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { close(); openConfirmForTenant({ tenant, month, onDone: refresh }); } }, icon('plus'), '입금 더 기록'),
     ),
   });
