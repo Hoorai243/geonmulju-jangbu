@@ -1,5 +1,5 @@
 // 은행 거래내역 파일로 입금 정리 — 파일 고르기 → 입금만 뽑아 자동 매칭 → 확인 후 저장.
-import { h, won, clear, toast } from '../util.js';
+import { h, won, clear, toast, append } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner, emptyState } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -131,7 +131,7 @@ export async function renderBankImport() {
     };
 
     clear(result);
-    result.append(
+    append(result, [
       h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
         h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, `입금 ${txns.length}건 · 입금자 ${groups.length}명`),
         h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, '같은 이름은 한 번만 정하면 그 이름 전부에 적용돼요. 한 번 정한 이름은 다음에도 자동으로 기억해요.'),
@@ -147,14 +147,14 @@ export async function renderBankImport() {
       dupTotal > 0 && h('div', { class: 'muted center', style: { fontSize: 'var(--fs-sm)' } }, `이미 저장된 ${dupTotal}건은 자동으로 건너뛰어요.`),
       h('div', { class: 'stack', style: { marginTop: '12px' } }, ...groups.map(groupEl)),
       h('div', { style: { position: 'sticky', bottom: '0', padding: '12px 0', background: 'linear-gradient(transparent, var(--paper) 30%)' } }, saveBtn),
-    );
+    ]);
     updateSave();
   }
 
   return screen({ plain: true },
     topbar({ title: '은행 파일로 정리', back: '/more' }),
     h('div', { class: 'stack-lg' },
-      banner('info', { title: '은행 거래내역 파일 올리기', text: '엑셀(.xls/.xlsx)·CSV로 받은 거래내역을 올리면, 입금만 뽑아 세입자에 자동으로 붙여드려요. 국민은행은 검증됐고, 다른 은행도 자동으로 인식해봐요. (PDF·사진은 아직 못 읽어요)' }),
+      banner('info', { title: '은행 거래내역 파일 올리기', text: '엑셀(.xls/.xlsx)·CSV로 받은 거래내역을 올리면, 입금만 뽑아 세입자에 자동으로 붙여드려요. 국민·기업은행은 검증됐고, 다른 은행도 자동으로 인식해봐요. (PDF·사진은 아직 못 읽어요)' }),
       fileInput,
       h('button', { class: 'btn btn--primary btn--lg', onClick: () => fileInput.click() }, icon('download'), '거래내역 파일 고르기'),
       h('button', { class: 'btn btn--ghost', onClick: () => navigate('/bank-guide') }, icon('info'), '거래내역 파일 받는 법 보기'),

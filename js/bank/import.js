@@ -73,10 +73,35 @@ function detectCols(header) {
   return col;
 }
 
+// 제목 줄이 없는 형식(기업은행 "거래용" 등): [날짜, 출금, 입금, 잔액, 적요, …]
+// 열 위치로 판단. 입금(col2)만 뽑음.
+function parseHeaderless(rows) {
+  const dateRe = /^\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/;
+  const data = rows.filter((r) => dateRe.test(String(r[0] || '').trim()));
+  if (data.length < 2) return null;
+  const numCount = (idx) => data.filter((r) => parseNum(r[idx]) > 0).length;
+  // 1,2번 열이 돈(출금/입금)처럼 보여야 함
+  if (numCount(1) + numCount(2) < 2) return null;
+  const out = [];
+  for (const r of data) {
+    const amount = parseNum(r[2]);       // col2 = 입금
+    if (amount <= 0) continue;           // 입금만
+    const date = parseBankDate(String(r[0]).split(/\s+/)[0]);
+    const name = String(r[4] || '').trim() || String(r[11] || '').trim(); // 적요
+    if (!date) continue;
+    out.push({ date, name, amount });
+  }
+  return out.length ? out : null;
+}
+
 // 표준 파서(자동 감지): 입금 행만 → {date, name, amount}
 function parseGeneric(rows) {
   const hi = findHeader(rows);
-  if (hi < 0) throw new Error('거래내역 형식을 알아보지 못했어요. 엑셀로 받은 파일인지 확인해 주세요.');
+  if (hi < 0) {
+    const alt = parseHeaderless(rows); // 제목 없는 형식 시도
+    if (alt) return alt;
+    throw new Error('거래내역 형식을 알아보지 못했어요. 엑셀로 받은 파일인지 확인해 주세요.');
+  }
   const col = detectCols(rows[hi]);
   if (col.date < 0 || (col.din < 0 && !(col.state >= 0 && col.amt >= 0))) {
     throw new Error('입금 열을 찾지 못했어요. (이 은행 형식은 아직 확정 전이에요 — 파일을 보여주시면 맞춰드릴게요)');
