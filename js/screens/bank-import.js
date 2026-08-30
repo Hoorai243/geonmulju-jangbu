@@ -17,9 +17,7 @@ export async function renderBankImport() {
   const fileInput = h('input', { type: 'file', accept: '.xls,.xlsx,.csv', style: { display: 'none' } });
   const status = h('div', { class: 'muted center', style: { padding: '8px' } });
 
-  fileInput.onchange = async () => {
-    const file = fileInput.files[0];
-    if (!file) return;
+  async function process(file) {
     clear(result);
     status.textContent = '파일을 읽는 중…';
     try {
@@ -29,10 +27,24 @@ export async function renderBankImport() {
       await review(txns);
     } catch (e) {
       status.textContent = '';
+      if (e.code === 'ENCRYPTED') { showEncryptedHelp(); return; }
       clear(result).appendChild(banner('bad', { title: '읽지 못했어요', text: e.message || '파일을 읽을 수 없어요.' }));
     }
-    fileInput.value = '';
-  };
+  }
+
+  // 잠긴(암호화된) 파일 — 토스·카카오 등. 비밀번호 없이 다시 저장해서 올리도록 안내.
+  function showEncryptedHelp() {
+    clear(result).appendChild(h('div', { class: 'card stack' },
+      banner('warn', { title: '이 파일은 비밀번호로 잠겨 있어요', text: '토스·카카오뱅크 등이 보내는 엑셀은 잠겨 있어서 지금은 바로 못 읽어요. 아래처럼 잠금을 풀어 다시 올려 주세요.' }),
+      h('ol', { style: { margin: 0, paddingLeft: '20px', lineHeight: '1.8' } },
+        h('li', {}, '받은 엑셀 파일을 열어요 (비밀번호는 보통 생년월일 6자리).'),
+        h('li', {}, '컴퓨터 엑셀에서 “다른 이름으로 저장” → 저장할 때 비밀번호를 넣지 말고 저장해요.'),
+        h('li', {}, '그렇게 저장한 파일을 여기 다시 올려요.')),
+      banner('info', { text: '국민은행처럼 잠기지 않은 엑셀을 주는 은행 파일은 이 과정 없이 바로 읽혀요.' }),
+    ));
+  }
+
+  fileInput.onchange = () => { const f = fileInput.files[0]; if (f) process(f); fileInput.value = ''; };
 
   async function review(txns) {
     if (!tenants.length) { result.appendChild(banner('info', { text: '먼저 세입자를 등록해 주세요.' })); return; }

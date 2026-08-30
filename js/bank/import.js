@@ -107,10 +107,22 @@ export const BANKS = [
   { id: 'auto', name: '다른 은행 (자동 감지)', verified: false },
 ];
 
-export async function readBankFile(file /* , bankId */) {
+export async function readBankFile(file) {
   const XLSX = await loadXLSX();
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(new Uint8Array(buf), { type: 'array', raw: false });
+  let wb;
+  try {
+    wb = XLSX.read(new Uint8Array(buf), { type: 'array', raw: false });
+  } catch (e) {
+    const m = (e && e.message) || '';
+    if (/password|encrypt/i.test(m)) {
+      // 비밀번호로 잠긴(암호화된) 파일 — 토스·카카오 등. 지금 부품으론 못 풀어서 안내로 처리.
+      const err = new Error('이 파일은 비밀번호로 잠겨 있어요.');
+      err.code = 'ENCRYPTED';
+      throw err;
+    }
+    throw e;
+  }
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
   return parseGeneric(rows);
