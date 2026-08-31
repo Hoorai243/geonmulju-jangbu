@@ -35,15 +35,32 @@ export async function coachMark({ target, title, text, seenKey, buttonText = '�
   await new Promise((resolve) => {
     // class 'coach-layer' 로 표시해 두면 syncBodyScroll 이 뒤 배경 스크롤을 막는다("알겠어요" 전까지).
     const layer = h('div', { class: 'coach-layer' });
-    const dismiss = () => { layer.remove(); syncBodyScroll(); activeCoach = false; if (seenKey) markSeenCoach(seenKey); resolve(); };
+    let closed = false, poppedByBack = false;
+    const finish = () => {
+      if (closed) return; closed = true;
+      layer.remove(); syncBodyScroll(); activeCoach = false;
+      if (seenKey) markSeenCoach(seenKey);
+      window.removeEventListener('popstate', onPop);
+      resolve();
+    };
+    // 뒤로가기(하드웨어/브라우저)로도 닫히게 — 열 때 히스토리 항목 하나 추가.
+    const onPop = () => { poppedByBack = true; finish(); };
+    const dismiss = () => {
+      if (closed) return;
+      if (!poppedByBack) { window.removeEventListener('popstate', onPop); history.back(); }
+      finish();
+    };
 
+    // 대상이 화면 밖으로 스크롤됐는지(강조 구멍을 숨기고 카드만 가운데에 띄운다)
+    const offscreen = rect.bottom < pad || rect.top > window.innerHeight - pad;
     const backdrop = h('div', { style: { position: 'fixed', inset: '0', zIndex: '199' }, onClick: dismiss });
     const hole = h('div', { style: {
       position: 'fixed', left: (rect.left - pad) + 'px', top: (rect.top - pad) + 'px',
       width: (rect.width + pad * 2) + 'px', height: (rect.height + pad * 2) + 'px',
       borderRadius: '14px', zIndex: '200', pointerEvents: 'none',
-      boxShadow: '0 0 0 9999px rgba(20,18,15,.62), 0 0 0 3px var(--primary)',
-      animation: 'coachPulse 1.4s ease-in-out infinite',
+      boxShadow: '0 0 0 9999px rgba(20,18,15,.62)' + (offscreen ? '' : ', 0 0 0 3px var(--primary)'),
+      animation: offscreen ? 'none' : 'coachPulse 1.4s ease-in-out infinite',
+      visibility: offscreen ? 'hidden' : 'visible',
     } });
     // 카드는 먼저 숨겨서 붙이고, 높이를 잰 뒤 화면 안에 다 보이도록 위치를 잡는다.
     const card = h('div', { class: 'card', style: {
@@ -58,14 +75,17 @@ export async function coachMark({ target, title, text, seenKey, buttonText = '�
     layer.append(backdrop, hole, card);
     document.body.appendChild(layer);
     syncBodyScroll();
+    history.pushState({ __coach: true }, '');
+    window.addEventListener('popstate', onPop);
 
-    // 위치: 아래 공간 있으면 아래, 없으면 위, 그래도 안 되면 화면 안에 맞춤(전체가 보이게)
+    // 위치: 아래 공간 있으면 아래, 없으면 위, 그래도 안 되면 가운데. 마지막에 화면 안으로 강제(버튼이 항상 보이게).
     const ch = card.offsetHeight;
     const margin = 12;
     let top;
-    if (rect.bottom + margin + ch + pad <= window.innerHeight) top = rect.bottom + margin;
-    else if (rect.top - margin - ch >= pad) top = rect.top - margin - ch;
-    else top = Math.max(pad, Math.min((window.innerHeight - ch) / 2, window.innerHeight - ch - pad));
+    if (!offscreen && rect.bottom + margin + ch + pad <= window.innerHeight) top = rect.bottom + margin;
+    else if (!offscreen && rect.top - margin - ch >= pad) top = rect.top - margin - ch;
+    else top = (window.innerHeight - ch) / 2;
+    top = Math.max(pad, Math.min(top, window.innerHeight - ch - pad));  // 항상 화면 안(버튼 잘림/화면밖 방지)
     card.style.top = Math.round(top) + 'px';
     card.style.visibility = 'visible';
   });
