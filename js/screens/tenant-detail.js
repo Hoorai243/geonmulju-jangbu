@@ -57,6 +57,7 @@ export async function renderTenantDetail({ params }) {
         ),
         h('dl', { class: 'deflist' },
           dt('계약 기간'), dd(`${formatMonth(t.contractStart)} ~ ${t.contractEnd ? formatMonth(t.contractEnd) : '미정'}`),
+          ...(t.trackStart ? [dt('장부 시작월'), dd(formatMonth(t.trackStart) + '부터')] : []),
           dt('월세'), dd(won(rate.rent) + '원'),
           dt('관리비'), dd((() => { const f = store.feeConfig(t, month); return `${won(f.amount)}원${f.cycle === 'bimonthly' ? ' · 격월(' + (f.parity === 'even' ? '짝수달' : '홀수달') + ')' : ''}`; })()),
           ...(() => { const w = store.waterConfig(t, month); return w.cycle !== 'none' && w.amount > 0

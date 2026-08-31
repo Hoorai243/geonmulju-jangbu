@@ -70,6 +70,8 @@ export async function saveTenant(data) {
     dueDay: Math.min(28, Math.max(1, Number(data.dueDay) || 1)),
     contractStart: data.contractStart || monthKey(),
     contractEnd: data.contractEnd || '',
+    // 장부(밀림) 세는 시작월. 비우면 계약 시작월부터. 계약이 옛날이어도 최근 달부터만 보고 싶을 때 씀.
+    trackStart: data.trackStart || '',
     notifyOverride: data.notifyOverride ?? rec.notifyOverride ?? null,
   });
   // 요금 이력: 신규면 초기 1건, 기존이면 유지
@@ -97,6 +99,27 @@ export async function deleteRateChange(tenantId, from) {
   const t = await db.get('tenants', tenantId);
   if (t.rentHistory.length <= 1) return t; // 최소 1건 유지
   t.rentHistory = t.rentHistory.filter((h) => h.from !== from);
+  await db.put('tenants', t);
+  return t;
+}
+
+// 계약 시작일을 옮길 때: 요금이력 첫 달(=세는 시작점)도 같이 옮기고 그 달 요금을 새 값으로.
+// 계약 시작일이 실제 "세는 시작점"이 되도록 맞춘다. (첫 달만 이동, 이후 변경 이력은 유지)
+export async function rebaseContractStart(tenantId, newFrom, rates = {}) {
+  const t = await db.get('tenants', tenantId);
+  const hist = [...(t.rentHistory || [])].sort((a, b) => compareMonth(a.from, b.from));
+  const oldFirst = hist[0]?.from;
+  const rest = hist.slice(1).filter((h) => h.from !== newFrom); // 새 달과 겹치는 뒤 이력 제거(중복 방지)
+  const first = { ...(hist[0] || {}), from: newFrom };
+  if ('rent' in rates) first.rent = Number(rates.rent) || 0;
+  if ('fee' in rates) first.fee = Number(rates.fee) || 0;
+  if ('feeCycle' in rates) first.feeCycle = rates.feeCycle;
+  if ('feeParity' in rates) first.feeParity = rates.feeParity;
+  if ('water' in rates) first.water = Number(rates.water) || 0;
+  if ('waterCycle' in rates) first.waterCycle = rates.waterCycle;
+  if ('waterParity' in rates) first.waterParity = rates.waterParity;
+  t.rentHistory = [first, ...rest].sort((a, b) => compareMonth(a.from, b.from));
+  t.contractStart = newFrom;
   await db.put('tenants', t);
   return t;
 }
@@ -308,7 +331,9 @@ export async function lateCount(tenant, uptoMonth = monthKey()) {
 // 선납/후납 반영 정산 — 넘치게 낸 달의 돈이 다음 달로 이월되고,
 // 전체 순액(net: +선납 / -밀림)도 계산. upto 달까지.
 export async function tenantLedger(tenant, upto = monthKey()) {
-  const start = tenant.rentHistory?.[0]?.from || tenant.contractStart;
+  const base = tenant.rentHistory?.[0]?.from || tenant.contractStart;
+  // 장부 시작월(trackStart)이 있으면 그 달부터만 센다(계약보다 뒤일 때만 — 앞이면 요금이 없어 의미 없음).
+  const start = (tenant.trackStart && base && compareMonth(tenant.trackStart, base) > 0) ? tenant.trackStart : base;
   const moved = tenant.status === 'movedout' && tenant.movedOutAt ? monthKey(new Date(tenant.movedOutAt)) : null;
   const end = moved && compareMonth(moved, upto) < 0 ? moved : upto;
   const pays = await getAllPaymentsForTenant(tenant.id);

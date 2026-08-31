@@ -40,6 +40,7 @@ export async function renderTenantForm({ params }) {
 
   const contractStart = h('input', { class: 'input', type: 'month', value: t?.contractStart || monthKey() });
   const contractEnd = h('input', { class: 'input', type: 'month', value: t?.contractEnd || '' });
+  const trackStart = h('input', { class: 'input', type: 'month', value: t?.trackStart || '' });
   const dueDay = h('select', { class: 'select' },
     ...Array.from({ length: 28 }, (_, i) => h('option', { value: String(i + 1), selected: (t?.dueDay || 1) === i + 1 }, `매월 ${i + 1}일`)));
 
@@ -128,6 +129,7 @@ export async function renderTenantForm({ params }) {
       dueDay: Number(dueDay.value),
       contractStart: contractStart.value || monthKey(),
       contractEnd: contractEnd.value || '',
+      trackStart: trackStart.value || '',
       rent: parseNum(rent.value), fee: parseNum(fee.value),
       feeCycle, feeParity,
       water: waterCb.checked ? parseNum(waterAmount.value) : 0,
@@ -136,8 +138,12 @@ export async function renderTenantForm({ params }) {
     };
     const doSave = async () => {
       const saved = await store.saveTenant(data);
-      // 기본 요금 동기화(수정 시)
-      if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, feeCycle: data.feeCycle, feeParity: data.feeParity, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
+      // 요금 동기화(수정 시). 계약 시작월을 옮겼으면 세는 시작점(요금이력 첫 달)도 같이 옮긴다.
+      if (editing && baseFrom) {
+        const rates = { rent: data.rent, fee: data.fee, feeCycle: data.feeCycle, feeParity: data.feeParity, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity };
+        if (data.contractStart !== baseFrom) await store.rebaseContractStart(saved.id, data.contractStart, rates);
+        else await store.changeRates(saved.id, { from: baseFrom, ...rates });
+      }
       // 새 세입자 + 보증금 있으면: 받은 걸로 기록할지 물어보기(등록만으론 "보관 중"에 안 잡히므로)
       if (!editing && data.deposit > 0) {
         toast('세입자를 등록했어요', 'ok');
@@ -165,13 +171,13 @@ export async function renderTenantForm({ params }) {
       }
       await doSave();
     };
-    // 계약 시작월이 여러 달 과거면 경고(막지 않음) — 그 사이가 전부 미납으로 잡혀 "밀림"이 크게 뜸
-    const startM = data.contractStart;
-    const monthsPast = startM ? ((parseMonth(monthKey()).y - parseMonth(startM).y) * 12 + (parseMonth(monthKey()).m - parseMonth(startM).m)) : 0;
+    // 실제로 세기 시작하는 달(장부 시작월이 있으면 그것, 없으면 계약 시작월)이 여러 달 과거면 경고(막지 않음)
+    const effStart = data.trackStart || data.contractStart;
+    const monthsPast = effStart ? ((parseMonth(monthKey()).y - parseMonth(effStart).y) * 12 + (parseMonth(monthKey()).m - parseMonth(effStart).m)) : 0;
     if (monthsPast >= 3) {
       confirmSheet({
-        title: '계약 시작월이 좀 예전이에요',
-        desc: `${formatMonth(startM)}부터로 하면 그 사이 ${monthsPast}달이 아직 안 낸 걸로 잡혀서 “밀림”이 크게 표시돼요. 보통은 장부 정리를 시작하는 달을 넣는 게 좋아요. 그래도 이 달로 저장할까요?`,
+        title: '이 달부터 세면 빈 달이 많아요',
+        desc: `${formatMonth(effStart)}부터 세면 그 사이 ${monthsPast}달이 아직 안 낸 걸로 잡혀 “밀림”이 크게 떠요. 그 달들 입금을 “은행 파일로 정리”(그 기간 거래내역)로 채워야 밀림이 사라져요. 최근 달만 확인하려면 아래 “장부 시작월”을 최근 달로 맞추면 돼요. 그래도 저장할까요?`,
         confirmText: '그대로 저장', onConfirm: proceed,
       });
       return;
@@ -202,8 +208,9 @@ export async function renderTenantForm({ params }) {
       field('관리비 (전기 등 포함)', suffixWon(fee)),
       feeCycleBlock,
       field('보증금', suffixWon(deposit), '선택'),
-      field('계약 시작월', contractStart),
+      field('계약 시작월', contractStart, null, '이 달부터 월세를 셈해요. 예전 달로 하면 그 사이가 “밀림”으로 잡히니, 그 기간 입금은 은행 파일로 채워 주세요.'),
       field('계약 만료월', contractEnd, '선택'),
+      field('장부 시작월', trackStart, '선택', '비우면 계약 시작월부터 세요. 계약은 예전이라도 “이 달부터만” 장부를 보고 싶으면(예: 이번 달 입금만 확인) 그 달을 넣으세요. 그 전 달은 밀림에 안 잡혀요.'),
       field('납기일', dueDay, null, '이 날짜에서 3일이 지나도록 입금이 없으면 “미납(빨강)”으로 표시돼요.'),
       // 수도세 따로 받기 (기본 숨김. 이미 수도세가 켜진 세입자만 계속 보여 끌 수 있게 함)
       (SHOW_WATER_SEPARATE || wc.cycle !== 'none') && h('div', { class: 'card' },
