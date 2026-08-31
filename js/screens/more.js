@@ -58,7 +58,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.29.2'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.29.3'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -210,6 +210,9 @@ export async function renderNotifySettings() {
   const daysSel = h('select', { class: 'select', style: { width: '150px', flex: 'none' } }, ...[7, 14, 30, 60].map((n) => h('option', { value: String(n), selected: (d.daysBefore || 30) === n }, `${n}일 전`)));
   daysSel.onchange = async () => { d.daysBefore = Number(daysSel.value); await store.setNotifyDefaults(d); toast('저장했어요', 'ok'); };
 
+  const bankDaySel = h('select', { class: 'select', style: { width: '150px', flex: 'none' } }, ...[15, 18, 20, 22, 25, 27, 28].map((n) => h('option', { value: String(n), selected: (d.bankReminderDay || 25) === n }, `매월 ${n}일`)));
+  bankDaySel.onchange = async () => { d.bankReminderDay = Number(bankDaySel.value); await store.setNotifyDefaults(d); applyNative(); toast('저장했어요', 'ok'); };
+
   return screen({ plain: true },
     topbar({ title: '알림 설정', back: '/more' }),
     h('div', { class: 'stack-lg' },
@@ -218,7 +221,8 @@ export async function renderNotifySettings() {
         h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '미납 알림'), h('div', { class: 'settingrow__desc' }, '납기일이 지나도 입금이 없으면')), mk('unpaid')),
         h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '계약 만료 알림'), h('div', { class: 'settingrow__desc' }, '만료가 다가오면 미리')), mk('expiry')),
         h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '만료 알림 시점')), daysSel),
-        h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '월말 정리 알림'), h('div', { class: 'settingrow__desc' }, '월말에 “은행 파일 받아 정리하세요” 안내 (안드로이드 앱은 앱을 닫아도 알림이 와요)')), mk('bankReminder')),
+        h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '월말 정리 알림'), h('div', { class: 'settingrow__desc' }, '이 날에 “은행 파일 받아 정리하세요” 안내 (안드로이드 앱은 앱을 닫아도 알림이 와요)')), mk('bankReminder')),
+        h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '정리 알림 날짜')), bankDaySel),
       ),
       banner('info', { text: '세입자마다 따로 켜고 끄고 싶으면, 그 세입자 화면에서 “이 세입자 알림”을 바꾸면 돼요. 그 설정이 전체 설정보다 우선해요.' }),
     ),
