@@ -2,6 +2,7 @@
 // 발송 "통로(channel)"를 분리: 지금은 문자(SMS) 흉내 스텁, 나중에 카카오 알림톡으로 교체만 하면 됨.
 import * as store from '../store.js';
 import { won, formatMonth, monthKey, addMonths, compareMonth, parseMonth, unitLabel } from '../util.js';
+import { ignoreNextBackground } from '../auth/autolock.js';
 
 /* ---------- 발송 통로(channel) 추상화 ---------- */
 class StubSmsChannel {
@@ -70,7 +71,7 @@ export function openSms(to, text) {
   const num = String(to || '').replace(/[^0-9+]/g, '');
   if (!num) return false;
   const url = 'sms:' + num + '?body=' + encodeURIComponent(text);
-  try { window.location.href = url; return true; } catch (e) { console.warn('문자 앱 열기 실패', e); return false; }
+  try { ignoreNextBackground(); window.location.href = url; return true; } catch (e) { console.warn('문자 앱 열기 실패', e); return false; }
 }
 
 /* ---------- 지금 챙겨야 할 일(알림함/배지 계산) ---------- */

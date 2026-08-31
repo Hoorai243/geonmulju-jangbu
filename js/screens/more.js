@@ -10,6 +10,7 @@ import { exportBuildingExcel, exportBuildingImage } from '../export/export.js';
 import { requireAuth } from '../ui/authgate.js';
 import { isNative, ensureMonthEndReminder, cancelMonthEndReminder } from '../notify/native.js';
 import { saveFile, backupNow } from '../export/save-file.js';
+import { ignoreNextBackground } from '../auth/autolock.js';
 
 /* ---------- 더보기 메뉴 ---------- */
 export async function renderMore() {
@@ -56,7 +57,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.28.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.28.1'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -110,7 +111,7 @@ function restore() {
       doImport(parsed); // 예전(암호화 전) 백업도 열 수 있게
     }
   };
-  document.body.appendChild(input); input.click(); setTimeout(() => input.remove(), 1000);
+  document.body.appendChild(input); ignoreNextBackground(); input.click(); setTimeout(() => input.remove(), 1000);
 }
 
 /* ---------- 계좌 관리 ---------- */

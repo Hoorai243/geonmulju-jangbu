@@ -7,6 +7,7 @@ import { matchDepositor } from '../matching.js';
 import { readBankFile } from '../bank/import.js';
 import { navigate } from '../router.js';
 import { coachMark } from '../ui/coach.js';
+import { ignoreNextBackground } from '../auth/autolock.js';
 
 const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
 
@@ -166,7 +167,7 @@ export async function renderBankImport() {
     h('div', { class: 'stack-lg' },
       banner('info', { title: '은행 거래내역 파일 올리기', text: '엑셀(.xls/.xlsx)·CSV로 받은 거래내역을 올리면, 입금만 뽑아 세입자에 자동으로 붙여드려요. 국민·기업은행은 검증됐고, 다른 은행도 자동으로 인식해봐요. (PDF·사진은 아직 못 읽어요)' }),
       fileInput,
-      h('button', { class: 'btn btn--primary btn--lg', onClick: () => fileInput.click() }, icon('download'), '거래내역 파일 고르기'),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: () => { ignoreNextBackground(); fileInput.click(); } }, icon('download'), '거래내역 파일 고르기'),
       h('button', { class: 'btn btn--ghost', onClick: () => navigate('/bank-guide') }, icon('info'), '거래내역 파일 받는 법 보기'),
       status,
       result,

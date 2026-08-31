@@ -3,6 +3,7 @@
 import { toast, monthKey, h, openSheet } from '../util.js';
 import * as db from '../db.js';
 import * as auth from '../auth/auth.js';
+import { ignoreNextBackground } from '../auth/autolock.js';
 
 function cap() { return typeof window !== 'undefined' ? window.Capacitor : undefined; }
 function isNative() { const c = cap(); return !!(c && c.isNativePlatform && c.isNativePlatform()); }
@@ -36,6 +37,7 @@ export async function saveFile(filename, blob) {
     const res = await Filesystem.writeFile({ path: filename, data: base64, directory: 'CACHE' });
     if (Share) {
       try {
+        ignoreNextBackground();
         await Share.share({ title: filename, url: res.uri, dialogTitle: '저장하거나 보내기' });
       } catch (e) {
         // 사용자가 공유 창을 닫은 경우 등 — 파일은 이미 저장돼 있음

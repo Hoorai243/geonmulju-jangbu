@@ -2,6 +2,7 @@
 import { openSheet, h, toast } from '../util.js';
 import { icon } from '../icons.js';
 import * as auth from '../auth/auth.js';
+import { ignoreNextBackground } from '../auth/autolock.js';
 
 // requireAuth({ title, desc, confirmText, onConfirm })
 export async function requireAuth({ title = '확인이 필요해요', desc = '되돌릴 수 없는 동작이에요. 지문이나 비밀번호로 확인해 주세요.', confirmText = '확인', onConfirm } = {}) {
@@ -15,7 +16,7 @@ export async function requireAuth({ title = '확인이 필요해요', desc = '�
 
       const ok = () => { close(); onConfirm && onConfirm(); };
       const doBio = async () => {
-        try { await auth.loginBiometric(); ok(); }
+        try { ignoreNextBackground(); await auth.loginBiometric(); ok(); }
         catch (e) { toast(e.message || '지문·생체 확인에 실패했어요.', 'bad'); }
       };
       const doPw = async () => {
