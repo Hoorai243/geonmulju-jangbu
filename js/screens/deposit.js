@@ -162,8 +162,19 @@ function openEvent(t, type, refresh, prefill, accounts = []) {
         class: 'btn btn--primary btn--lg', onClick: async () => {
           const amt = parseNum(amount.value);
           if (amt <= 0) return toast('금액을 입력해 주세요.', 'bad');
-          await store.addLedger({ tenantId: t.id, type, amount: amt, category, memo: memo.value, date: date.value, accountId });
-          close(); toast('기록했어요', 'ok'); refresh();
+          const doSave = async () => {
+            await store.addLedger({ tenantId: t.id, type, amount: amt, category, memo: memo.value, date: date.value, accountId });
+            close(); toast('기록했어요', 'ok'); refresh();
+          };
+          // 환불·차감이 현재 보관액보다 많으면 한 번 더 확인(실수 방지)
+          if (type === 'refund' || type === 'deduct') {
+            const held = store.depositSummary(await store.getLedger(t.id)).held;
+            if (amt > held) {
+              confirmSheet({ title: '보관액보다 많아요', desc: `현재 보관 중인 보증금은 ${won(held)}원인데 ${won(amt)}원을 ${type === 'refund' ? '환불' : '차감'}하려고 해요. 그래도 기록할까요?`, confirmText: '그대로 기록', onConfirm: doSave });
+              return;
+            }
+          }
+          await doSave();
         },
       }, icon('check'), '기록하기'),
     ),

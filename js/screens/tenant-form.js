@@ -1,5 +1,5 @@
 // 세입자 등록/수정 화면.
-import { h, toast, attachAmountFormat, parseNum, monthKey } from '../util.js';
+import { h, toast, attachAmountFormat, parseNum, monthKey, confirmSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -109,6 +109,9 @@ export async function renderTenantForm({ params }) {
   const save = async () => {
     if (!unit.value.trim()) return toast('호실 번호를 입력해 주세요.', 'bad');
     if (!name.value.trim()) return toast('세입자 이름을 입력해 주세요.', 'bad');
+    // 계약 만료월이 시작월보다 빠르면 막음(실수 방지)
+    if (contractStart.value && contractEnd.value && contractEnd.value < contractStart.value)
+      return toast('계약 만료월이 시작월보다 빨라요. 다시 확인해 주세요.', 'bad');
     const data = {
       id: t?.id, buildingId,
       unit: unit.value, name: name.value, kind,
@@ -126,11 +129,20 @@ export async function renderTenantForm({ params }) {
       waterCycle: waterCb.checked ? waterCycle : 'none',
       waterParity,
     };
-    const saved = await store.saveTenant(data);
-    // 기본 요금 동기화(수정 시)
-    if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, feeCycle: data.feeCycle, feeParity: data.feeParity, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
-    toast(editing ? '수정했어요' : '세입자를 등록했어요', 'ok');
-    navigate('/tenant/' + saved.id, { replace: true });
+    const doSave = async () => {
+      const saved = await store.saveTenant(data);
+      // 기본 요금 동기화(수정 시)
+      if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, feeCycle: data.feeCycle, feeParity: data.feeParity, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
+      toast(editing ? '수정했어요' : '세입자를 등록했어요', 'ok');
+      navigate('/tenant/' + saved.id, { replace: true });
+    };
+    // 같은 호실이 이미 있으면 한 번 더 확인(실수 방지)
+    const others = (await store.getTenants(buildingId)).filter((x) => x.status !== 'movedout' && x.id !== t?.id);
+    if (others.some((x) => (x.unit || '').trim() === unit.value.trim())) {
+      confirmSheet({ title: '같은 호실이 이미 있어요', desc: `${unit.value.trim()}호로 등록된 세입자가 이미 있어요. 그래도 저장할까요?`, confirmText: '그대로 저장', onConfirm: doSave });
+      return;
+    }
+    await doSave();
   };
 
   return screen({ plain: true },
