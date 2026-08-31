@@ -31,8 +31,8 @@ export async function renderTenantDetail({ params }) {
   }
 
   setTimeout(() => coachMark({
-    target: 'coach-months', seenKey: 'pastMonth', title: '지난 달도 여기서 기록해요',
-    text: '각 달 동그라미를 누르면 그 달 입금을 기록하거나, 잘못된 건 되돌릴 수 있어요. 예전 달 입금을 빠뜨렸을 때 여기서 채워 넣으세요.',
+    target: 'coach-months', seenKey: 'pastMonth', title: '지난 달도 여기서',
+    text: '각 달 **동그라미를 누르면** 그 달 입금을 기록하거나 되돌려요. 빠뜨린 지난 달을 여기서 채우세요.',
   }), 500);
 
   return screen({ plain: true },
@@ -266,8 +266,8 @@ function openRateChange(t, refresh) {
     ),
   });
   setTimeout(() => coachMark({
-    target: 'coach-rate', seenKey: 'rateChange', title: '언제부터 바뀌는지가 중요해요',
-    text: '여기서 정한 “적용 시작월”부터 새 요금이 적용돼요. 바꾸기 전에 밀린 달은 예전 금액 그대로 남으니 안심하세요.',
+    target: 'coach-rate', seenKey: 'rateChange', title: '적용 시작월이 중요해요',
+    text: '**적용 시작월**부터 새 요금이 적용돼요. 그 전 밀린 달은 **옛 금액 그대로**예요.',
   }), 350);
 }
 

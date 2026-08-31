@@ -56,8 +56,8 @@ export async function renderDepositDetail({ params }) {
   };
 
   setTimeout(() => coachMark({
-    target: 'coach-deposit', seenKey: 'deposit', title: '보증금은 기록으로 남겨요',
-    text: '보증금은 금액 하나가 아니라, 입금·차감·환불을 각각 기록해요. 이 버튼들로 기록해두면 퇴거할 때 돌려줄 금액이 자동으로 계산돼요.',
+    target: 'coach-deposit', seenKey: 'deposit', title: '보증금은 기록으로',
+    text: '**입금·차감·환불**을 각각 기록해요. 그러면 퇴거 때 **돌려줄 돈이 자동 계산**돼요.',
   }), 450);
 
   return screen({ plain: true },

@@ -15,6 +15,12 @@ export async function resetCoaches() {
 let activeCoach = false;
 const shownKeys = new Set();
 
+// 문구 안의 **강조**를 굵게 표시(핵심만 눈에 띄게). 나머지는 그대로.
+function richText(text) {
+  return String(text).split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 ? h('strong', { style: { color: 'var(--ink)', fontWeight: 800 } }, part) : part);
+}
+
 // coachMark({ target, title, text, seenKey, buttonText }) — 닫으면 resolve 되는 Promise 반환
 export async function coachMark({ target, title, text, seenKey, buttonText = '알겠어요' }) {
   if (typeof target === 'string') target = document.getElementById(target);
@@ -68,7 +74,7 @@ export async function coachMark({ target, title, text, seenKey, buttonText = '�
       width: 'min(92vw, 520px)', zIndex: '201', top: '0px', visibility: 'hidden',
     } },
       title && h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)', marginBottom: '6px' } }, title),
-      h('div', { style: { color: 'var(--ink-2)', lineHeight: '1.6' } }, text),
+      h('div', { style: { color: 'var(--ink-2)', lineHeight: '1.6' } }, ...richText(text)),
       h('button', { class: 'btn btn--primary btn--block', style: { marginTop: '14px' }, onClick: dismiss }, buttonText),
     );
 

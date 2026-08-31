@@ -90,16 +90,16 @@ export async function renderDashboard({ query } = { query: {} }) {
     setTimeout(() => {
       runCoachQueue([
         {
-          target: 'coach-paycheck', seenKey: 'paycheck', title: '여기서 입금을 확인해요',
-          text: '이 네모를 누르면 입금 확인 창이 열려요. 받은 금액을 확인하고 저장하면 완납(초록)으로 바뀌어요. 이미 낸 세입자는 네모를 누르면 입금 내역이 열리고, 거기서 휴지통으로 되돌릴 수 있어요.',
+          target: 'coach-paycheck', seenKey: 'paycheck', title: '여기서 입금 확인',
+          text: '**이 네모**를 누르면 입금 확인 창이 열려요. 저장하면 **초록(완납)**이 돼요.',
         },
         {
-          target: 'coach-status', seenKey: 'statusColors', title: '색과 숫자 뜻',
-          text: '초록=완납, 빨강=미납, 노랑=부분납부/미확인이에요. 세입자 줄의 “밀림”은 아직 안 낸 쌓인 금액, “선납”은 미리 더 낸 금액이에요.',
+          target: 'coach-status', seenKey: 'statusColors', title: '색 뜻',
+          text: '**초록**=완납, **빨강**=미납, **노랑**=부분·미확인. “밀림”은 안 낸 돈, “선납”은 미리 낸 돈이에요.',
         },
         {
-          target: 'coach-unmatched', seenKey: 'unmatched', title: '누구 입금인지 정해요',
-          text: '은행 파일에서 이름을 자동으로 못 붙인 입금이에요. 이 칸을 누르면 세입자를 고를 수 있고, 고르면 그 사람 입금으로 처리돼요.',
+          target: 'coach-unmatched', seenKey: 'unmatched', title: '누구 입금인지 정하기',
+          text: '이름을 자동으로 못 붙인 입금이에요. **이 칸을 누르면** 세입자를 고를 수 있어요.',
         },
       ]);
     }, 500);
