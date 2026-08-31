@@ -37,7 +37,9 @@ export async function renderMore() {
           link('download', '은행 파일로 입금 정리', () => navigate('/bank-import')),
           link('info', '거래내역 받는 법 (은행별)', () => navigate('/bank-guide')),
           link('receipt', '제외·연결 다시 보기', () => navigate('/match-rules')),
-          link('receipt', '부가세 · 세금계산서 (상가)', () => navigate('/tax')),
+          // 부가세·세금계산서 메뉴 숨김(신고·발행은 홈택스/세무사에서, 앱은 자기확인용이라 지금은 미사용).
+          // 되살리려면 아래 줄 주석 해제 + tenant-form.js 의 SHOW_VAT 를 true 로.
+          // link('receipt', '부가세 · 세금계산서 (상가)', () => navigate('/tax')),
           link('history', '지난 이력 · 밀린 횟수', () => navigate('/history')),
           link('users', '떠난 세입자 (내역 뽑기)', () => navigate('/left-tenants')),
           link('bank', '입금받는 계좌 관리', () => navigate('/accounts')),
@@ -58,7 +60,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.32.1'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.33.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );

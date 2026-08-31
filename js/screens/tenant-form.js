@@ -52,6 +52,11 @@ export async function renderTenantForm({ params }) {
   // 다시 필요하면 이 값을 true 로 바꾸면 등록 화면에 스위치가 돌아옴. (저장 로직·데이터는 그대로 유지)
   const SHOW_WATER_SEPARATE = false;
 
+  // 부가세(세금계산서) 기능 숨김. 신고·발행은 홈택스/세무사에서 하고, 앱은 자기확인용이라
+  // 지금은 아무도 안 써서 감춤. 다시 필요하면 true 로 바꾸고 more.js 의 세금계산서 메뉴도 되살림.
+  // (이미 부가세가 켜진 세입자는 계속 보여 끌 수 있게 함 — 데이터·계산 로직은 그대로 유지)
+  const SHOW_VAT = false;
+
   // ----- 수도세 따로 받기 (매월/격월) -----
   const wc = t ? store.waterConfig(t, baseFrom) : { amount: 0, cycle: 'none', parity: 'odd' };
   let waterCycle = wc.cycle === 'none' ? 'monthly' : wc.cycle; // 켰을 때 기본 매월
@@ -184,7 +189,7 @@ export async function renderTenantForm({ params }) {
       (() => { shopFields.appendChild(h('div', { class: 'stack' },
         field('사업 이름', businessName, '선택'),
         field('사업자등록번호', bizNo, '선택'),
-        h('div', { class: 'card' },
+        (SHOW_VAT || !!t?.vat) && h('div', { class: 'card' },
           h('div', { class: 'settingrow', style: { padding: 0 } },
             h('div', { class: 'settingrow__main' },
               h('div', { class: 'settingrow__title' }, '부가세 받기 (세금계산서)'),
