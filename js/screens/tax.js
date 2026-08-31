@@ -1,6 +1,6 @@
 // 부가세·세금계산서 정리 — 상가(부가세) 세입자의 공급가액·부가세를 기간별로 뽑아줌.
 // 실제 발행·신고는 홈택스/세무사에서. (앱은 계산·정리·리포트)
-import { h, won, monthKey, addMonths, formatMonth, parseMonth } from '../util.js';
+import { h, won, monthKey, addMonths, formatMonth, parseMonth , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner, emptyState } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -47,7 +47,7 @@ export async function renderTax({ query } = { query: {} }) {
               h('tbody', {},
                 ...rows.map((r) => h('tr', {},
                   h('td', {},
-                    h('div', { style: { fontWeight: 700 } }, `${r.tenant.unit}호 ${r.tenant.name}`),
+                    h('div', { style: { fontWeight: 700 } }, `${unitLabel(r.tenant.unit)} ${r.tenant.name}`),
                     r.tenant.bizNo && h('div', { class: 'muted', style: { fontSize: '0.85rem' } }, r.tenant.bizNo)),
                   h('td', { class: 'num' }, won(r.supply)),
                   h('td', { class: 'num' }, won(r.vat)),

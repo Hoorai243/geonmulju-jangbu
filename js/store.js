@@ -24,7 +24,9 @@ export async function saveBuilding({ id, name, address }) {
 // 현재 작업중인 건물(지금은 1개). meta에 저장.
 export async function getCurrentBuildingId() {
   let id = await db.metaGet('currentBuildingId');
-  if (!id) { const list = await getBuildings(); id = list[0]?.id; if (id) await db.metaSet('currentBuildingId', id); }
+  const list = await getBuildings();
+  // 저장된 건물이 없거나(백업 불러오기 등으로) 더 이상 존재하지 않으면 첫 건물로 자동 보정
+  if (!id || !list.some((b) => b.id === id)) { id = list[0]?.id; if (id) await db.metaSet('currentBuildingId', id); }
   return id;
 }
 export async function setCurrentBuildingId(id) { await db.metaSet('currentBuildingId', id); }

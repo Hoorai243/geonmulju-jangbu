@@ -13,7 +13,7 @@ export async function renderTenantForm({ params }) {
   const baseFrom = t ? (t.rentHistory?.[0]?.from || t.contractStart) : null;
 
   // 입력 요소
-  const unit = h('input', { class: 'input', placeholder: '예: 101, 201, B1', value: t?.unit || '', inputmode: 'text' });
+  const unit = h('input', { class: 'input', placeholder: '예: 101, 201 · 또는 상호(부동산, 미용실)', value: t?.unit || '', inputmode: 'text' });
   const name = h('input', { class: 'input', placeholder: '세입자 이름', value: t?.name || '' });
   let kind = t?.kind || 'house';
   const houseBtn = h('button', { type: 'button', class: 'choice__opt' + (kind === 'house' ? ' choice__opt--on' : '') }, icon('home'), '주택');
@@ -148,7 +148,7 @@ export async function renderTenantForm({ params }) {
   return screen({ plain: true },
     topbar({ title: editing ? '세입자 수정' : '세입자 등록', back: editing ? '/tenant/' + t.id : '/tenants' }),
     h('div', { class: 'stack' },
-      field('호실 번호', unit),
+      field('호실 번호 (또는 상호)', unit),
       field('세입자 이름', name),
       field('종류', h('div', { class: 'choice' }, houseBtn, shopBtn)),
       // 상가 전용

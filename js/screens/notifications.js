@@ -1,5 +1,5 @@
 // 알림함 — 지금 챙길 일(미납/계약 만료/월말 정리/백업). 미납·만료 안내는 폰 문자 앱을 열어 보낸다.
-import { h, won, formatMonth, toast, openSheet } from '../util.js';
+import { h, won, formatMonth, toast, openSheet , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -81,7 +81,7 @@ export async function renderNotifications() {
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
             h('span', { class: 'chip chip--bad' }, icon('alert', { size: 16 }), '미납'),
             h('button', { class: 'rowcard__main', style: btnReset(), onClick: () => navigate('/tenant/' + a.tenant.id) },
-              h('div', { class: 'rowcard__title' }, `${a.tenant.unit}호 ${a.tenant.name}`),
+              h('div', { class: 'rowcard__title' }, `${unitLabel(a.tenant.unit)} ${a.tenant.name}`),
               h('div', { class: 'rowcard__meta' }, `${formatMonth(a.month)} · 남은 ${won(a.remaining)}원`))),
           h('button', { class: 'btn btn--secondary btn--block mt-4', onClick: () => sendUnpaidMsg(a) }, icon('phone'), '미납 안내 문자 보내기'),
         ))),
@@ -93,7 +93,7 @@ export async function renderNotifications() {
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
             h('span', { class: 'chip chip--warn' }, icon('calendar', { size: 16 }), a.monthsLeft <= 0 ? '이번 달' : `${a.monthsLeft}개월 뒤`),
             h('button', { class: 'rowcard__main', style: btnReset(), onClick: () => navigate('/tenant/' + a.tenant.id) },
-              h('div', { class: 'rowcard__title' }, `${a.tenant.unit}호 ${a.tenant.name}`),
+              h('div', { class: 'rowcard__title' }, `${unitLabel(a.tenant.unit)} ${a.tenant.name}`),
               h('div', { class: 'rowcard__meta' }, `만료 ${formatMonth(a.tenant.contractEnd)}`))),
           h('div', { class: 'btn-row mt-4' },
             h('button', { class: 'btn btn--secondary', onClick: () => navigate('/tenant/' + a.tenant.id + '/edit') }, icon('edit'), '재계약(수정)'),

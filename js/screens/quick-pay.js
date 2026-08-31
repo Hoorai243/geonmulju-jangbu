@@ -2,7 +2,7 @@
 // 손으로 빠르게 완납 처리하려는 기능. 나중에 오픈뱅킹 자동연동이 되면 제거 후보.
 // [제거 방법] 이 파일 삭제 + app.js 의 '/quick-pay' 라우트/임포트 제거
 //            + dashboard.js 의 "한 번에 확인" 버튼 제거.
-import { h, won, monthKey, addMonths, formatMonth, toast } from '../util.js';
+import { h, won, monthKey, addMonths, formatMonth, toast , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner, statusChip } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -54,7 +54,7 @@ export async function renderQuickPay({ query } = { query: {} }) {
     },
       box,
       h('div', { class: 'rowcard__main' },
-        h('div', { class: 'rowcard__title' }, `${tenant.unit}호 ${tenant.name}`),
+        h('div', { class: 'rowcard__title' }, `${unitLabel(tenant.unit)} ${tenant.name}`),
         h('div', { class: 'rowcard__meta' }, `받을 금액 ${won(st.remaining)}원`, paidLast && ' · 지난달 완납')),
       h('div', { class: 'rowcard__right' }, statusChip(st.state)),
     );

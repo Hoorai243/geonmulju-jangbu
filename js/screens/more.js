@@ -1,5 +1,5 @@
 // 더보기 — 계좌/알림/보안 설정, 건물 정보, 전체 내보내기, 백업.
-import { h, monthKey, openSheet, confirmSheet, toast, clear } from '../util.js';
+import { h, monthKey, openSheet, confirmSheet, toast, clear , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -56,7 +56,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.27.1'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.28.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -228,7 +228,7 @@ export async function renderMatchRules() {
   const buildingId = await store.getCurrentBuildingId();
   const rules = await store.getMatchRules(buildingId);
   const tenants = await store.getTenants(buildingId);
-  const tName = (id) => { const t = tenants.find((x) => x.id === id); return t ? `${t.unit}호 ${t.name}` : '(삭제된 세입자)'; };
+  const tName = (id) => { const t = tenants.find((x) => x.id === id); return t ? `${unitLabel(t.unit)} ${t.name}` : '(삭제된 세입자)'; };
   const refresh = () => navigate('/match-rules', { replace: true });
 
   const ignores = rules.ignores || [];

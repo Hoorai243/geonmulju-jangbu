@@ -1,5 +1,5 @@
 // 입금 확인 공통 흐름 — (A) 입금자명으로 찾기, (B) 세입자 지정 후 금액 확인.
-import { h, won, parseNum, attachAmountFormat, todayISO, formatMonth, toast, openSheet, clear, append } from '../util.js';
+import { h, won, parseNum, attachAmountFormat, todayISO, formatMonth, toast, openSheet, clear, append , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { statusChip } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -40,7 +40,7 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
   amount.addEventListener('input', update);
 
   openSheet({
-    title: `${tenant.unit}호 ${tenant.name} · 입금 확인`,
+    title: `${unitLabel(tenant.unit)} ${tenant.name} · 입금 확인`,
     desc: `${formatMonth(month)}`,
     body: (close) => {
       update();
@@ -83,7 +83,7 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
             clear(actionArea); append(actionArea, [
               ...warns.map((w) => h('div', { class: 'banner banner--bad' }, icon('alert'), h('div', {}, w))),
               h('div', { class: 'banner banner--warn' }, icon('alert'),
-                h('div', {}, h('strong', {}, '이대로 저장할까요? '), `${tenant.unit}호 ${tenant.name} · ${formatMonth(month)} · ${won(amt)}원`)),
+                h('div', {}, h('strong', {}, '이대로 저장할까요? '), `${unitLabel(tenant.unit)} ${tenant.name} · ${formatMonth(month)} · ${won(amt)}원`)),
               h('div', { class: 'btn-row', style: { marginTop: '8px' } },
                 h('button', { class: 'btn btn--secondary', onClick: showInitial }, '다시 볼게요'),
                 h('button', { class: 'btn btn--primary', onClick: () => doSave(amt) }, icon('check'), '네, 저장')),
@@ -114,15 +114,15 @@ export async function openNameMatch({ buildingId, month, onDone }) {
     if (suggestion) {
       const t = suggestion.tenant;
       result.appendChild(h('div', { class: 'banner banner--info' }, icon('info'),
-        h('div', {}, h('strong', {}, '이 분이 맞나요?'), `${t.unit}호 ${t.name}${t.businessName ? ' (' + t.businessName + ')' : ''}`)));
-      result.appendChild(h('button', { class: 'btn btn--primary btn--lg mt-4', onClick: () => pick(t) }, icon('check'), `${t.unit}호 ${t.name}님으로 확인`));
+        h('div', {}, h('strong', {}, '이 분이 맞나요?'), `${unitLabel(t.unit)} ${t.name}${t.businessName ? ' (' + t.businessName + ')' : ''}`)));
+      result.appendChild(h('button', { class: 'btn btn--primary btn--lg mt-4', onClick: () => pick(t) }, icon('check'), `${unitLabel(t.unit)} ${t.name}님으로 확인`));
       result.appendChild(h('div', { class: 'center muted', style: { margin: '10px 0' } }, '다른 사람인가요? 아래에서 고르세요'));
     }
     // 후보/전체 선택 드롭다운
     const sel = h('select', { class: 'select' },
       h('option', { value: '' }, '세입자 직접 선택…'),
       ...candidates.filter((c) => !suggestion || c.tenant.id !== suggestion.tenant.id)
-        .map((c) => h('option', { value: c.tenant.id }, `${c.tenant.unit}호 ${c.tenant.name}${c.tenant.businessName ? ' (' + c.tenant.businessName + ')' : ''}`)));
+        .map((c) => h('option', { value: c.tenant.id }, `${unitLabel(c.tenant.unit)} ${c.tenant.name}${c.tenant.businessName ? ' (' + c.tenant.businessName + ')' : ''}`)));
     sel.onchange = () => { const t = tenants.find((x) => x.id === sel.value); if (t) pick(t); };
     result.appendChild(sel);
     result.appendChild(h('button', { class: 'btn btn--ghost btn--lg mt-4', onClick: saveUnmatched }, icon('receipt'), '누군지 몰라 “미확인 입금”으로 저장'));

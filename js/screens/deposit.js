@@ -1,5 +1,5 @@
 // 보증금 — 세입자별 입금/차감/환불을 이벤트로 기록. 퇴거 시 최종 정산 자동 계산.
-import { h, won, formatDate, todayISO, openSheet, confirmSheet, toast, attachAmountFormat, parseNum } from '../util.js';
+import { h, won, formatDate, todayISO, openSheet, confirmSheet, toast, attachAmountFormat, parseNum , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -19,7 +19,7 @@ export async function renderDepositList() {
     return h('button', { class: 'rowcard', onClick: () => navigate('/deposit/' + t.id) },
       h('div', { style: { width: '48px', height: '48px', flex: 'none', borderRadius: '12px', background: 'var(--primary-tint)', color: 'var(--primary-press)', display: 'grid', placeItems: 'center' } }, icon('wallet')),
       h('div', { class: 'rowcard__main' },
-        h('div', { class: 'rowcard__title' }, `${t.unit}호 ${t.name}`),
+        h('div', { class: 'rowcard__title' }, `${unitLabel(t.unit)} ${t.name}`),
         h('div', { class: 'rowcard__meta' }, `계약 보증금 ${won(t.deposit)}원`)),
       h('div', { class: 'rowcard__right' },
         h('div', { class: 'muted', style: { fontSize: '0.8rem' } }, '현재 보관'),
@@ -61,7 +61,7 @@ export async function renderDepositDetail({ params }) {
   }), 450);
 
   return screen({ plain: true },
-    topbar({ title: `${t.unit}호 보증금`, sub: t.name, back: '/deposit' }),
+    topbar({ title: `${unitLabel(t.unit)} 보증금`, sub: t.name, back: '/deposit' }),
     h('div', { class: 'stack-lg' },
 
       // 요약 카드

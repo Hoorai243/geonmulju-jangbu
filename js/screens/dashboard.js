@@ -1,5 +1,5 @@
 // 이번 달 현황판 — 핵심 화면. 상태색 목록 + 입금 확인 + 미확인 입금.
-import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear, append } from '../util.js';
+import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear, append, unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, statusChip, banner, STATUS } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -138,7 +138,7 @@ function tenantRow({ tenant, st, pays, net }, month, refresh, isFirst) {
   return h('div', { class: 'rowcard' },
     box,
     h('button', { class: 'rowcard__main', style: { background: 'none', border: 'none', font: 'inherit', textAlign: 'left', padding: 0, cursor: 'pointer' }, onClick: () => navigate('/tenant/' + tenant.id) },
-      h('div', { class: 'rowcard__title' }, `${tenant.unit}호 ${tenant.name}`),
+      h('div', { class: 'rowcard__title' }, `${unitLabel(tenant.unit)} ${tenant.name}`),
       h('div', { class: 'rowcard__meta' },
         st.carried ? '완납 · 지난 선납으로 채움'
           : st.state === 'ok' ? `완납 · ${won(st.paid)}원`
@@ -180,7 +180,7 @@ function openPaidSheet({ tenant, month, pays, refresh }) {
     return card;
   };
   openSheet({
-    title: `${tenant.unit}호 ${tenant.name}`,
+    title: `${unitLabel(tenant.unit)} ${tenant.name}`,
     desc: `${formatMonth(month)} 입금 내역`,
     body: (close) => h('div', { class: 'stack' },
       ...pays.map((p) => payRow(p, close)),
@@ -197,7 +197,7 @@ function unmatchedCard(p, tenants, refresh, isFirst) {
     body: (close) => {
       const sel = h('select', { class: 'select' },
         h('option', { value: '' }, '세입자 선택…'),
-        ...tenants.map((t) => h('option', { value: t.id }, `${t.unit}호 ${t.name}`)));
+        ...tenants.map((t) => h('option', { value: t.id }, `${unitLabel(t.unit)} ${t.name}`)));
       return h('div', { class: 'stack' },
         sel,
         h('button', {

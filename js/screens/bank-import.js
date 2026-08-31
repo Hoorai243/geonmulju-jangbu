@@ -1,5 +1,5 @@
 // 은행 거래내역 파일로 입금 정리 — 파일 고르기 → 입금만 뽑아 자동 매칭 → 확인 후 저장.
-import { h, won, clear, toast, append } from '../util.js';
+import { h, won, clear, toast, append , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner, emptyState } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -116,7 +116,7 @@ export async function renderBankImport() {
       const sel = h('select', { class: 'select', id: isFirst ? 'coach-bank-sel' : null, style: { minHeight: '52px', fontSize: 'var(--fs-body)' }, disabled: onlyDup },
         h('option', { value: '', selected: g.decision === '' }, onlyDup ? '이미 있음 (모두)' : '건너뛰기 (이번만)'),
         h('option', { value: 'ignore', selected: g.decision === 'ignore' }, '제외 (앞으로 계속)'),
-        ...tenants.map((tn) => h('option', { value: tn.id, selected: g.decision === tn.id }, `${tn.unit}호 ${tn.name}`)));
+        ...tenants.map((tn) => h('option', { value: tn.id, selected: g.decision === tn.id }, `${unitLabel(tn.unit)} ${tn.name}`)));
       sel.onchange = () => { g.decision = sel.value; updateSave(); };
       const badge = onlyDup ? h('span', { class: 'chip chip--idle' }, '이미 있음')
         : g.decision && g.decision !== 'ignore' ? h('span', { class: 'chip chip--ok' }, '연결됨')

@@ -1,5 +1,5 @@
 // 지난 이력 — 세입자별 밀린 횟수 + 최근 6개월 상태. 특정 달 상세는 “현황” 탭에서 달을 넘겨 확인.
-import { h, monthKey, addMonths, formatMonth } from '../util.js';
+import { h, monthKey, addMonths, formatMonth , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -32,7 +32,7 @@ export async function renderHistory() {
         h('button', { class: 'rowcard', style: { flexDirection: 'column', alignItems: 'stretch', gap: '10px' }, onClick: () => navigate('/tenant/' + t.id) },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
             h('div', { class: 'rowcard__main' },
-              h('div', { class: 'rowcard__title' }, `${t.unit}호 ${t.name}`),
+              h('div', { class: 'rowcard__title' }, `${unitLabel(t.unit)} ${t.name}`),
               h('div', { class: 'rowcard__meta' }, late > 0 ? `지금까지 ${late}번 밀렸어요` : '밀린 적 없어요')),
             late > 0
               ? h('span', { class: 'chip chip--bad' }, `${late}번`)

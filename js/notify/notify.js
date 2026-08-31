@@ -1,7 +1,7 @@
 // 알림 — 미납/계약만료 안내.
 // 발송 "통로(channel)"를 분리: 지금은 문자(SMS) 흉내 스텁, 나중에 카카오 알림톡으로 교체만 하면 됨.
 import * as store from '../store.js';
-import { won, formatMonth, monthKey, addMonths, compareMonth, parseMonth } from '../util.js';
+import { won, formatMonth, monthKey, addMonths, compareMonth, parseMonth, unitLabel } from '../util.js';
 
 /* ---------- 발송 통로(channel) 추상화 ---------- */
 class StubSmsChannel {
@@ -19,17 +19,17 @@ export function setChannel(c) { _channel = c; }
 
 /* ---------- 메시지 문구 (건물주가 고칠 수 있는 템플릿) ---------- */
 // 자리표시: {호실} {이름} {월} {금액} {만료월}
-const DEFAULT_UNPAID = '[임대료 안내] {호실}호 {이름}님, {월} 임대료 중 {금액}원이 아직 확인되지 않았습니다. 확인 부탁드립니다.';
-const DEFAULT_EXPIRY = '[계약 안내] {호실}호 {이름}님, 계약 만료가 다가옵니다({만료월}).';
+const DEFAULT_UNPAID = '[임대료 안내] {호실} {이름}님, {월} 임대료 중 {금액}원이 아직 확인되지 않았습니다. 확인 부탁드립니다.';
+const DEFAULT_EXPIRY = '[계약 안내] {호실} {이름}님, 계약 만료가 다가옵니다({만료월}).';
 const rep = (s, a, b) => (a == null || a === '' ? s : s.split(a).join(b));
 
 function fillUnpaid(tpl, tenant, month, remaining) {
-  let s = rep(tpl, '{호실}', tenant.unit);
+  let s = rep(tpl, '{호실}', unitLabel(tenant.unit));
   s = rep(s, '{이름}', tenant.name); s = rep(s, '{월}', formatMonth(month)); s = rep(s, '{금액}', won(remaining));
   return s;
 }
 function fillExpiry(tpl, tenant) {
-  let s = rep(tpl, '{호실}', tenant.unit);
+  let s = rep(tpl, '{호실}', unitLabel(tenant.unit));
   s = rep(s, '{이름}', tenant.name); s = rep(s, '{만료월}', formatMonth(tenant.contractEnd));
   return s;
 }
@@ -45,13 +45,13 @@ export async function expiryMessage(tenant) {
 // 이름이 그대로 남으면(되돌리기 실패) 저장하지 않는다 — 다른 세입자 문자에 이 이름이 새지 않게.
 export async function saveUnpaidFromEdited(edited, tenant, month, remaining) {
   let t = rep(edited, won(remaining), '{금액}');
-  t = rep(t, formatMonth(month), '{월}'); t = rep(t, tenant.name, '{이름}'); t = rep(t, tenant.unit + '호', '{호실}호');
+  t = rep(t, formatMonth(month), '{월}'); t = rep(t, tenant.name, '{이름}'); t = rep(t, unitLabel(tenant.unit), '{호실}');
   if (tenant.name && t.includes(tenant.name)) return false;
   await store.saveMsgTemplate('unpaid', t); return true;
 }
 export async function saveExpiryFromEdited(edited, tenant) {
   let t = rep(edited, formatMonth(tenant.contractEnd), '{만료월}');
-  t = rep(t, tenant.name, '{이름}'); t = rep(t, tenant.unit + '호', '{호실}호');
+  t = rep(t, tenant.name, '{이름}'); t = rep(t, unitLabel(tenant.unit), '{호실}');
   if (tenant.name && t.includes(tenant.name)) return false;
   await store.saveMsgTemplate('expiry', t); return true;
 }

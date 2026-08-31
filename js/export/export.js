@@ -2,7 +2,7 @@
 // 엑셀: 서식 있는 .xlsx (ExcelJS, js/vendor/exceljs.min.js 를 필요할 때만 불러옴)
 // 이미지: A4 세로 리포트 (Canvas). 색/레이아웃은 참고 디자인과 동일 팔레트.
 import * as store from './../store.js';
-import { won, formatMonth, monthKey, addMonths, compareMonth, todayISO, toast } from '../util.js';
+import { won, formatMonth, monthKey, addMonths, compareMonth, todayISO, toast , unitLabel } from '../util.js';
 import { STATUS } from '../ui/shell.js';
 import { saveFile } from './save-file.js';
 
@@ -173,7 +173,7 @@ export async function exportTenantImage(t) {
   cell(ctx, won(rep.total) + '원', colX(3), y, colW(3), footH, { align: 'right', color: C.ink, font: FONT('800 26px') });
   ctx.strokeStyle = hx(C.teal); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, y + 0.5); ctx.lineTo(mx + CW, y + 0.5); ctx.stroke();
 
-  saveCanvas(cv, `입금내역_${t.unit}호_${t.name}.png`);
+  saveCanvas(cv, `입금내역_${unitLabel(t.unit)}_${t.name}.png`);
 }
 
 /* ================= 엑셀(.xlsx, 서식 있음) ================= */
@@ -259,7 +259,7 @@ export async function exportTenantExcel(t) {
   R.getCell(4).value = rep.total;
 
   const buf = await wb.xlsx.writeBuffer();
-  download(`입금내역_${t.unit}호_${t.name}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  download(`입금내역_${unitLabel(t.unit)}_${t.name}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   toast('엑셀 파일을 내려받았어요', 'ok');
 }
 

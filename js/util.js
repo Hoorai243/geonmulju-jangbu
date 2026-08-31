@@ -27,6 +27,8 @@ export function append(parent, children) {
   }
 }
 export function frag(...children) { const f = document.createDocumentFragment(); append(f, children); return f; }
+// 호실 표시 — 숫자가 들어간 호실(201·B01)은 "호"를 붙이고, 상호(부동산·미용실 등 글자만)는 그대로.
+export function unitLabel(unit) { const u = String(unit || ''); return /\d/.test(u) ? u + '호' : u; }
 export function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); return node; }
 export const $ = (sel, root = document) => root.querySelector(sel);
 

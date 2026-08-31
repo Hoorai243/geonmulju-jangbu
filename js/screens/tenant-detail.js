@@ -1,5 +1,5 @@
 // 세입자 상세 — 정보, 이번 달 상태, 요금 변경, 연체 횟수, 알림 개별설정, 내보내기, 퇴거/삭제.
-import { h, won, monthKey, addMonths, formatMonth, formatDate, todayISO, openSheet, confirmSheet, toast, attachAmountFormat, parseNum, clear } from '../util.js';
+import { h, won, monthKey, addMonths, formatMonth, formatDate, todayISO, openSheet, confirmSheet, toast, attachAmountFormat, parseNum, clear , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, statusChip, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -37,7 +37,7 @@ export async function renderTenantDetail({ params }) {
 
   return screen({ plain: true },
     topbar({
-      title: `${t.unit}호`, sub: t.name, back: '/tenants',
+      title: `${unitLabel(t.unit)}`, sub: t.name, back: '/tenants',
       right: t.status !== 'movedout' && h('button', { class: 'iconbtn', 'aria-label': '수정', onClick: () => navigate('/tenant/' + t.id + '/edit') }, icon('edit')),
     }),
     h('div', { class: 'stack-lg' },
@@ -153,7 +153,7 @@ async function openMonthSheet(t, m, refresh) {
 
   openSheet({
     title: `${formatMonth(m)} 입금`,
-    desc: `${t.unit}호 ${t.name}`,
+    desc: `${unitLabel(t.unit)} ${t.name}`,
     body: (close) => {
       const removePay = (p) => {
         // 되돌리면 이 달이 어떤 상태가 되는지 미리 보여준다
@@ -294,7 +294,7 @@ function doMoveOut(t) {
 }
 function doDelete(t) {
   requireAuth({
-    title: `${t.unit}호 ${t.name} 삭제`,
+    title: `${unitLabel(t.unit)} ${t.name} 삭제`,
     desc: '모든 입금·보증금 기록이 함께 지워지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.',
     confirmText: '삭제', onConfirm: async () => { await store.deleteTenant(t.id); toast('삭제했어요'); navigate('/tenants', { replace: true }); },
   });
