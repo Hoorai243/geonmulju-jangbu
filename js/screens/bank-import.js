@@ -104,7 +104,14 @@ export async function renderBankImport() {
         if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
         else if (g.decision) {
           rules2.aliases[g.key] = g.decision; // 다음에도 기억
-          for (const t of g.live) { await store.addPayment({ buildingId, tenantId: g.decision, month: t.date.slice(0, 7), amount: t.amount, depositorName: t.name, paidAt: t.date, source: 'bank', note: '은행파일', accountId: acctId || null }); saved++; }
+          for (const t of g.live) {
+            if (g.asDeposit) {
+              await store.addLedger({ tenantId: g.decision, type: 'in', amount: t.amount, date: t.date, memo: '은행파일' + (t.name ? ' · ' + t.name : ''), accountId: acctId || null, source: 'bank' });
+            } else {
+              await store.addPayment({ buildingId, tenantId: g.decision, month: t.date.slice(0, 7), amount: t.amount, depositorName: t.name, paidAt: t.date, source: 'bank', note: '은행파일', accountId: acctId || null });
+            }
+            saved++;
+          }
         }
       }
       await store.saveMatchRules(buildingId, rules2);
@@ -119,6 +126,9 @@ export async function renderBankImport() {
         h('option', { value: 'ignore', selected: g.decision === 'ignore' }, '제외 (앞으로 계속)'),
         ...tenants.map((tn) => h('option', { value: tn.id, selected: g.decision === tn.id }, `${unitLabel(tn.unit)} ${tn.name}`)));
       sel.onchange = () => { g.decision = sel.value; updateSave(); };
+      const depCb = h('input', { type: 'checkbox', checked: !!g.asDeposit });
+      depCb.onchange = () => { g.asDeposit = depCb.checked; };
+      const depRow = onlyDup ? null : h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, depCb, '이 입금은 월세가 아니라 보증금이에요');
       const badge = onlyDup ? h('span', { class: 'chip chip--idle' }, '이미 있음')
         : g.decision && g.decision !== 'ignore' ? h('span', { class: 'chip chip--ok' }, '연결됨')
           : g.decision === 'ignore' ? h('span', { class: 'chip chip--idle' }, '제외')
@@ -129,6 +139,7 @@ export async function renderBankImport() {
         h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', margin: '2px 0 10px' } },
           `${g.live.length + g.dup.length}건 · 합계 ${won(g.sum)}원` + (g.dup.length ? ` (이미 ${g.dup.length}건 저장됨)` : '')),
         sel,
+        depRow,
       );
     };
 

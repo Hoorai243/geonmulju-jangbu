@@ -349,8 +349,8 @@ export async function getLedger(tenantId) {
   const list = await db.getBy('deposit_ledger', 'byTenant', tenantId);
   return list.sort((a, b) => (a.date === b.date ? (a.createdAt < b.createdAt ? -1 : 1) : (a.date < b.date ? -1 : 1)));
 }
-export async function addLedger({ tenantId, type, amount, category, memo, date, accountId }) {
-  const rec = { id: uid(), tenantId, type, amount: Number(amount) || 0, category: category || '', memo: memo || '', date: date || todayISO(), accountId: accountId || null, createdAt: new Date().toISOString() };
+export async function addLedger({ tenantId, type, amount, category, memo, date, accountId, source }) {
+  const rec = { id: uid(), tenantId, type, amount: Number(amount) || 0, category: category || '', memo: memo || '', date: date || todayISO(), accountId: accountId || null, source: source || 'manual', createdAt: new Date().toISOString() };
   await db.put('deposit_ledger', rec);
   return rec;
 }

@@ -106,12 +106,21 @@ export async function renderDepositDetail({ params }) {
           ? banner('info', { text: '아직 기록이 없어요. 위 버튼으로 보증금 입금부터 기록해 보세요.' })
           : h('div', { class: 'stack' }, ...[...led].reverse().map((l) => {
             const ti = typeInfo[l.type];
+            const srcText = l.source === 'bank' ? '은행 확인' : '직접 입력';
+            // 되돌리면 보관액이 어떻게 되는지 미리 계산
+            const afterHeld = l.type === 'in' ? s.held - l.amount : s.held + l.amount;
+            const undo = () => confirmSheet({
+              title: '이 기록을 되돌릴까요?',
+              desc: `${ti.label} ${won(l.amount)}원(${srcText})을 지우면 현재 보관액이 ${won(afterHeld)}원으로 바뀌어요.`,
+              confirmText: '되돌리기',
+              onConfirm: async () => { await store.deleteLedger(l.id); toast('되돌렸어요', 'ok'); refresh(); },
+            });
             return h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
               h('span', { class: `chip chip--${ti.cls}` }, ti.label),
               h('div', { class: 'rowcard__main' },
                 h('div', { style: { color: ti.color, fontWeight: 800, fontSize: 'var(--fs-lg)' } }, `${ti.sign} ${won(l.amount)}원`),
-                h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${formatDate(l.date)}${l.category ? ' · ' + l.category : ''}${l.accountId ? ' · ' + acctName(l.accountId) : ''}${l.memo ? ' · ' + l.memo : ''}`)),
-              h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: async () => { await store.deleteLedger(l.id); toast('삭제했어요'); refresh(); } }, icon('trash')),
+                h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${formatDate(l.date)} · ${srcText}${l.category ? ' · ' + l.category : ''}${l.accountId ? ' · ' + acctName(l.accountId) : ''}${l.memo ? ' · ' + l.memo : ''}`)),
+              h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: undo }, icon('trash')),
             );
           })),
       ),
