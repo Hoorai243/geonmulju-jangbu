@@ -31,11 +31,23 @@ export async function renderTenants() {
   );
 }
 
+// 호실/상호 네모 — 글자 수에 따라 폰트 줄이고, 넘치면 네모 안에서 두 줄로.
+function unitBox(unit) {
+  const u = unit || '—';
+  const len = [...u].length;
+  const fs = len <= 2 ? '1.05rem' : len === 3 ? '0.9rem' : len === 4 ? '0.78rem' : '0.64rem';
+  return h('div', { style: {
+    width: '52px', height: '52px', borderRadius: '12px', background: 'var(--primary-tint)', color: 'var(--primary-press)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: fs, flex: 'none',
+    overflow: 'hidden', wordBreak: 'break-all', lineHeight: '1.1', textAlign: 'center', padding: '3px', boxSizing: 'border-box',
+  } }, u);
+}
+
 async function row(t, month, movedout = false) {
   const { total } = store.ratesForMonth(t, month);
   const kindLabel = t.kind === 'shop' ? '상가' : '주택';
   return h('button', { class: 'rowcard', onClick: () => navigate('/tenant/' + t.id) },
-    h('div', { style: { width: '52px', height: '52px', borderRadius: '12px', background: 'var(--primary-tint)', color: 'var(--primary-press)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: '1.05rem', flex: 'none' } }, t.unit || '—'),
+    unitBox(t.unit),
     h('div', { class: 'rowcard__main' },
       h('div', { class: 'rowcard__title' }, t.name || '이름없음', movedout && h('span', { class: 'chip chip--idle', style: { marginLeft: '8px' } }, '퇴거')),
       h('div', { class: 'rowcard__meta' }, `${kindLabel}${t.businessName ? ' · ' + t.businessName : ''} · 월 ${won(total)}원`),
