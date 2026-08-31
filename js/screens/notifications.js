@@ -1,32 +1,53 @@
 // 알림함 — 지금 챙길 일(미납/계약 만료/월말 정리/백업). 미납·만료 안내는 폰 문자 앱을 열어 보낸다.
-import { h, won, formatMonth, toast, confirmSheet } from '../util.js';
+import { h, won, formatMonth, toast, openSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
-import { computeAlerts, openSms, unpaidMessage, expiryMessage } from '../notify/notify.js';
+import { computeAlerts, openSms, unpaidMessage, expiryMessage, saveUnpaidFromEdited, saveExpiryFromEdited } from '../notify/notify.js';
 import { backupNow } from '../export/save-file.js';
 import { navigate } from '../router.js';
+
+// 보낼 문자를 보여주고, 고쳐서 보내는 시트. onSend(고친내용) 호출.
+function openEditableSend({ title, text, onSend }) {
+  const ta = h('textarea', { class: 'input', rows: '6', style: { minHeight: '150px', lineHeight: '1.6', resize: 'vertical' } });
+  ta.value = text;
+  let ctrl;
+  ctrl = openSheet({
+    title, desc: '보낼 문자예요. 필요하면 고친 뒤 보내세요.',
+    body: () => h('div', { class: 'stack' },
+      h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '보낼 내용'), ta),
+      h('p', { class: 'hint' }, '고친 문구는 다음에도(다른 세입자에게도) 그대로 쓰여요. 이름·금액·달은 자동으로 그 사람 것으로 바뀌어요.'),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: () => { const v = ta.value.trim(); if (!v) return toast('내용이 비었어요.', 'bad'); ctrl.close(); onSend(v); } }, icon('phone'), '문자 앱 열기'),
+    ),
+  });
+}
 
 export async function renderNotifications() {
   const buildingId = await store.getCurrentBuildingId();
   const alerts = await computeAlerts(buildingId);
 
-  const sendUnpaidMsg = (a) => {
+  const sendUnpaidMsg = async (a) => {
     if (!a.tenant.phone) return toast('이 세입자의 휴대폰 번호가 없어요. 세입자 수정에서 넣어 주세요.', 'bad');
-    confirmSheet({
+    openEditableSend({
       title: '미납 안내 문자',
-      desc: `${a.tenant.unit}호 ${a.tenant.name}님(${a.tenant.phone})에게 보낼 문자 앱을 엽니다. 내용을 확인하고 직접 “전송”을 눌러 주세요.`,
-      confirmText: '문자 앱 열기',
-      onConfirm: () => { if (openSms(a.tenant.phone, unpaidMessage(a.tenant, a.month, a.remaining))) toast('문자 앱을 열었어요. 확인 후 전송하세요.', 'ok'); },
+      text: await unpaidMessage(a.tenant, a.month, a.remaining),
+      onSend: async (edited) => {
+        if (!openSms(a.tenant.phone, edited)) return;
+        const saved = await saveUnpaidFromEdited(edited, a.tenant, a.month, a.remaining);
+        toast(saved ? '문자 앱을 열었어요. 바뀐 문구는 다음에도 쓰여요.' : '문자 앱을 열었어요.', 'ok');
+      },
     });
   };
-  const sendExpiryMsg = (a) => {
+  const sendExpiryMsg = async (a) => {
     if (!a.tenant.phone) return toast('이 세입자의 휴대폰 번호가 없어요.', 'bad');
-    confirmSheet({
+    openEditableSend({
       title: '계약 만료 안내 문자',
-      desc: `${a.tenant.unit}호 ${a.tenant.name}님에게 보낼 문자 앱을 엽니다. 내용을 확인하고 직접 “전송”을 눌러 주세요.`,
-      confirmText: '문자 앱 열기',
-      onConfirm: () => { if (openSms(a.tenant.phone, expiryMessage(a.tenant))) toast('문자 앱을 열었어요. 확인 후 전송하세요.', 'ok'); },
+      text: await expiryMessage(a.tenant),
+      onSend: async (edited) => {
+        if (!openSms(a.tenant.phone, edited)) return;
+        const saved = await saveExpiryFromEdited(edited, a.tenant);
+        toast(saved ? '문자 앱을 열었어요. 바뀐 문구는 다음에도 쓰여요.' : '문자 앱을 열었어요.', 'ok');
+      },
     });
   };
 

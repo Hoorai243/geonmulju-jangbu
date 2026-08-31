@@ -381,6 +381,10 @@ export async function dismissBankReminder(month) { await db.metaSet('bankReminde
 // 마지막 백업 시각(ISO) — 백업 챙김 알림용
 export async function getLastBackupAt() { return await db.metaGet('lastBackupAt'); }
 
+// 안내 문자 문구 템플릿 (kind: 'unpaid' | 'expiry')
+export async function getMsgTemplate(kind) { return await db.metaGet('msgTemplate:' + kind); }
+export async function saveMsgTemplate(kind, text) { await db.metaSet('msgTemplate:' + kind, text); }
+
 // 세입자별 유효 알림 여부(개별 설정이 전체값을 덮어씀)
 export function effectiveNotify(tenant, defaults) {
   if (tenant.notifyOverride === true) return true;

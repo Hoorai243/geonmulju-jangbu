@@ -4,6 +4,7 @@ import { icon } from '../icons.js';
 import { screen } from '../ui/shell.js';
 import * as auth from '../auth/auth.js';
 import { navigate } from '../router.js';
+import { attemptBiometricLogin } from '../auth/autolock.js';
 
 export async function renderLogin() {
   const hasBio = await auth.hasBiometric();
@@ -18,9 +19,9 @@ export async function renderLogin() {
   };
   pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doPassword(); });
 
-  const doBio = async (auto) => {
-    try { await auth.loginBiometric(); navigate('/', { replace: true }); }
-    catch (e) { if (!auto) toast(e.message || '지문·생체 확인에 실패했어요.', 'bad'); }
+  const doBio = async () => {
+    const r = await attemptBiometricLogin();
+    if (r === 'fail') toast('지문·생체 확인에 실패했어요. 다시 시도하거나 비밀번호로 열어 주세요.', 'bad');
   };
 
   // 비밀번호 영역: 생체가 있으면 처음엔 숨김
@@ -31,8 +32,7 @@ export async function renderLogin() {
   );
   const showPw = () => { pwSection.style.display = 'block'; setTimeout(() => pw.focus(), 50); };
 
-  // 자동 지문 시도는 하지 않는다. 앱이 막 켜진 순간(WebView 준비 전)에 지문창을 띄우면
-  // 인식돼도 결과가 씹혀 로그인이 안 되는 문제가 있었다. 큰 "지문·생체로 열기" 버튼을 누르면 확실히 된다.
+  // 지문 자동 요청은 autolock.js 가 담당한다(앱이 준비된 뒤/돌아올 때). 여기 버튼은 수동용.
 
   return screen({ plain: true },
     h('div', { class: 'brand' },
@@ -41,7 +41,7 @@ export async function renderLogin() {
       h('div', { class: 'brand__tag' }, '오늘도 편안하게 확인하세요'),
     ),
     h('div', { class: 'stack' },
-      bioOk && h('button', { class: 'btn btn--primary btn--lg', onClick: () => doBio(false) }, icon('fingerprint'), '지문·생체로 열기'),
+      bioOk && h('button', { class: 'btn btn--primary btn--lg', onClick: doBio }, icon('fingerprint'), '지문·생체로 열기'),
       bioOk && h('button', { class: 'btn btn--ghost', onClick: showPw }, icon('lock'), '비밀번호로 입력'),
       pwSection,
     ),
