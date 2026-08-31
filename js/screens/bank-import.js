@@ -1,5 +1,5 @@
 // 은행 거래내역 파일로 입금 정리 — 파일 고르기 → 입금만 뽑아 자동 매칭 → 확인 후 저장.
-import { h, won, clear, toast, append , unitLabel } from '../util.js';
+import { h, won, clear, toast, append, unitLabel, openSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner, emptyState } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -98,25 +98,61 @@ export async function renderBankImport() {
       saveBtn.disabled = n === 0;
     };
     saveBtn.onclick = async () => {
-      const rules2 = await store.getMatchRules(buildingId);
-      let saved = 0;
+      // 저장 계획 + "수기 교체" 후보 찾기.
+      // 같은 세입자·같은 달·같은 금액의 '직접 입력' 기록이 있으면(정확한 날짜 일치는 이미 '이미 있음'으로 빠졌으니, 여기선 날짜만 다른 경우),
+      // 그 은행 입금은 그 수기 기록과 같은 것일 수 있음 → 교체 후보. 수기 1건은 은행 1줄만 흡수(개수로 맞춰 '또 보낸 것'은 안 지움).
+      const fresh = await store.getAllPaymentsForBuilding(buildingId);
+      const usedManual = new Set();
+      const plan = [];
       for (const g of groups) {
-        if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
-        else if (g.decision) {
-          rules2.aliases[g.key] = g.decision; // 다음에도 기억
-          for (const t of g.live) {
-            if (g.asDeposit) {
-              await store.addLedger({ tenantId: g.decision, type: 'in', amount: t.amount, date: t.date, memo: '은행파일' + (t.name ? ' · ' + t.name : ''), accountId: acctId || null, source: 'bank' });
-            } else {
-              await store.addPayment({ buildingId, tenantId: g.decision, month: t.date.slice(0, 7), amount: t.amount, depositorName: t.name, paidAt: t.date, source: 'bank', note: '은행파일', accountId: acctId || null });
-            }
-            saved++;
+        if (!g.decision || g.decision === 'ignore') continue;
+        for (const t of g.live) {
+          const month = t.date.slice(0, 7);
+          let replaceId = null;
+          if (!g.asDeposit) {
+            const m = fresh.find((p) => !usedManual.has(p.id) && p.source !== 'bank' && p.tenantId === g.decision && p.month === month && p.amount === t.amount);
+            if (m) { replaceId = m.id; usedManual.add(m.id); }
           }
+          plan.push({ t, tenantId: g.decision, asDeposit: g.asDeposit, replaceId });
         }
       }
-      await store.saveMatchRules(buildingId, rules2);
-      toast(`${saved}건을 저장했어요`, 'ok');
-      navigate('/');
+
+      const commit = async (replaceManual) => {
+        const rules2 = await store.getMatchRules(buildingId);
+        for (const g of groups) {
+          if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
+          else if (g.decision) rules2.aliases[g.key] = g.decision; // 다음에도 기억
+        }
+        let saved = 0, replaced = 0;
+        for (const p of plan) {
+          if (replaceManual && p.replaceId) { await store.deletePayment(p.replaceId); replaced++; }
+          if (p.asDeposit) {
+            await store.addLedger({ tenantId: p.tenantId, type: 'in', amount: p.t.amount, date: p.t.date, memo: '은행파일' + (p.t.name ? ' · ' + p.t.name : ''), accountId: acctId || null, source: 'bank' });
+          } else {
+            await store.addPayment({ buildingId, tenantId: p.tenantId, month: p.t.date.slice(0, 7), amount: p.t.amount, depositorName: p.t.name, paidAt: p.t.date, source: 'bank', note: '은행파일', accountId: acctId || null });
+          }
+          saved++;
+        }
+        await store.saveMatchRules(buildingId, rules2);
+        toast(replaced ? `${saved}건 저장 (직접 입력 ${replaced}건을 은행 확인으로 바꿈)` : `${saved}건을 저장했어요`, 'ok');
+        navigate('/');
+      };
+
+      // 교체 후보(직접 입력과 겹칠 수 있는 것)가 있으면 사람에게 물어본다: 같은 입금? 또 보낸 것?
+      const dupCount = plan.filter((p) => p.replaceId).length;
+      if (dupCount > 0) {
+        openSheet({
+          title: '겹칠 수 있는 입금이 있어요',
+          desc: `직접 입력해 둔 ${dupCount}건과 같은 세입자·같은 달·같은 금액의 은행 입금이 있어요.`,
+          body: (close) => h('div', { class: 'stack' },
+            h('div', { class: 'muted', style: { lineHeight: '1.6' } }, '같은 입금이면 “은행 확인으로 바꾸기”를 누르세요. 직접 입력분을 지우고 은행 기록으로 바꿔 중복을 막아요. 세입자가 깜빡하고 또 보낸 거라면 “또 보낸 거예요”를 눌러 따로 저장하세요.'),
+            h('button', { class: 'btn btn--primary btn--lg', onClick: () => { close(); commit(true); } }, icon('check'), '은행 확인으로 바꾸기 (같은 입금)'),
+            h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { close(); commit(false); } }, '또 보낸 거예요 (따로 저장)'),
+          ),
+        });
+        return;
+      }
+      await commit(true);
     };
 
     const groupEl = (g, isFirst) => {

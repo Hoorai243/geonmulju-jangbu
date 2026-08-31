@@ -57,6 +57,7 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '이번에 받은 금액'), h('div', { class: 'input-suffix' }, amount, h('span', { class: 'suffix' }, '원')), diffLine, preview),
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '입금자명'), depositor),
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '입금일'), date),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', lineHeight: '1.5' } }, '※ 되도록 “은행 파일로 정리”를 쓰는 게 정확해요. 날짜·이름이 자동으로 맞아 중복도 안 생겨요. 직접 입력은 은행 파일이 없거나 급할 때만 쓰세요.'),
         (() => {
           const actionArea = h('div');
           const doSave = async (amt) => {
