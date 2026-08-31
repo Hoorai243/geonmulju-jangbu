@@ -1,7 +1,7 @@
 // 입금 확인 공통 흐름 — (A) 입금자명으로 찾기, (B) 세입자 지정 후 금액 확인.
 import { h, won, parseNum, attachAmountFormat, todayISO, formatMonth, toast, openSheet, clear, append , unitLabel } from '../util.js';
 import { icon } from '../icons.js';
-import { statusChip } from '../ui/shell.js';
+import { statusChip, banner } from '../ui/shell.js';
 import * as store from '../store.js';
 import { matchDepositor } from '../matching.js';
 
@@ -45,6 +45,7 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
     body: (close) => {
       update();
       return h('div', { class: 'stack' },
+        banner('warn', { title: '되도록 “은행 파일로 정리”를 쓰세요', text: '직접 입력은 날짜·이름이 정확하지 않아 나중에 헷갈릴 수 있어요. 은행 파일이 없거나 급할 때만 쓰세요. 나중에 은행 파일을 불러오면 직접 입력한 것과 겹치는지 확인해서 중복(두 번 기록)을 막아줘요.' }),
         h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
           h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('span', { class: 'muted' }, '월세'), h('span', { class: 'amount won' }, won(rentInfo.rent))),
           h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: '6px' } }, h('span', { class: 'muted' }, '관리비'), h('span', { class: 'amount won' }, won(rentInfo.fee))),
@@ -57,7 +58,6 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '이번에 받은 금액'), h('div', { class: 'input-suffix' }, amount, h('span', { class: 'suffix' }, '원')), diffLine, preview),
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '입금자명'), depositor),
         h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '입금일'), date),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', lineHeight: '1.5' } }, '※ 되도록 “은행 파일로 정리”를 쓰는 게 정확해요. 날짜·이름이 자동으로 맞아 중복도 안 생겨요. 직접 입력은 은행 파일이 없거나 급할 때만 쓰세요.'),
         (() => {
           const actionArea = h('div');
           const doSave = async (amt) => {
