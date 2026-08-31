@@ -47,11 +47,31 @@ const GUIDES = [
   },
 ];
 
+const TRANSFER = {
+  steps: [
+    '카카오톡 “나에게 보내기”(제일 쉬움) — 컴퓨터 카톡에서 나와의 채팅에 엑셀 파일을 끌어다 놓고, 폰 카톡에서 그 파일을 “저장”해요.',
+    '이메일 — 컴퓨터에서 내 메일로 파일을 첨부해 보내고, 폰 메일 앱에서 첨부파일을 저장해요.',
+    'USB 케이블 — 폰을 컴퓨터에 연결해 폰의 “Download(다운로드)” 폴더에 파일을 복사해요.',
+    '옮긴 뒤, 이 앱에서 “거래내역 파일 고르기”를 누르고 방금 저장한 곳(보통 “다운로드”)에서 그 파일을 고르면 돼요.',
+  ],
+  tip: '카톡으로 받은 파일은 폰의 “다운로드” 또는 “KakaoTalk” 폴더에 있어요. 파일 이름에 “거래내역”이 들어가 있으면 그거예요.',
+};
+
 export async function renderBankGuide() {
   return screen({ plain: true },
     topbar({ title: '거래내역 받는 법', back: '/bank-import' }),
     h('div', { class: 'stack-lg' },
       banner('info', { text: '거래내역을 “엑셀(.xls/.xlsx)” 또는 “CSV” 파일로 받아야 읽을 수 있어요. 메뉴 이름은 앱 버전마다 조금 다를 수 있어요.' }),
+
+      // 컴퓨터에서 받은 파일을 폰으로 옮기는 법 (KB·기업은행은 PC에서 엑셀을 받으므로 필요)
+      h('div', { class: 'card', style: { borderColor: 'var(--primary)', borderWidth: '2px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' } },
+          icon('phone', { cls: '' }),
+          h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)' } }, '컴퓨터 파일을 폰으로 옮기기'),
+          h('span', { class: 'chip chip--ok', style: { marginLeft: 'auto' } }, '편한 것 하나')),
+        h('ol', { style: { margin: '0 0 0 4px', paddingLeft: '20px', lineHeight: '1.7' } }, ...TRANSFER.steps.map((s) => h('li', { style: { marginBottom: '6px' } }, s))),
+        h('div', { class: 'banner banner--info', style: { marginTop: '12px' } }, icon('info'), h('div', {}, TRANSFER.tip)),
+      ),
       ...GUIDES.map((g) => h('div', { class: 'card' },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' } },
           icon('bank', { cls: '' }),
