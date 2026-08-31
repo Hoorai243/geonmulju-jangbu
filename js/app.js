@@ -15,7 +15,7 @@ import { renderTenantDetail } from './screens/tenant-detail.js';
 import { renderDepositList, renderDepositDetail } from './screens/deposit.js';
 import { renderHistory } from './screens/history.js';
 import { renderNotifications } from './screens/notifications.js';
-import { renderMore, renderAccounts, renderSecurity, renderNotifySettings, renderMatchRules } from './screens/more.js';
+import { renderMore, renderAccounts, renderSecurity, renderNotifySettings, renderMatchRules, renderLeftTenants } from './screens/more.js';
 import { renderQuickPay } from './screens/quick-pay.js'; // ⚠️ 임시 수기 도우미
 import { renderBankImport } from './screens/bank-import.js';
 import { renderBankGuide } from './screens/bank-guide.js';
@@ -74,6 +74,7 @@ async function boot() {
   route('/security', renderSecurity);
   route('/notify-settings', renderNotifySettings);
   route('/match-rules', renderMatchRules);
+  route('/left-tenants', renderLeftTenants);
   setNotFound(renderDashboard);
 
   startRouter();

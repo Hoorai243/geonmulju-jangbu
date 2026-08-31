@@ -39,10 +39,15 @@ function loadExcelJS() {
 
 /* ================= 데이터 준비 ================= */
 // 세입자 1명: 계약 시작월 ~ (현재 또는 퇴거월) 월별 입금내역
-async function tenantReport(t) {
+const srcTag = (p) => (p.source === 'bank' ? ' (은행)' : ' (직접)');
+
+async function tenantReport(t, { bankOnly = false } = {}) {
   const start = t.rentHistory?.[0]?.from || t.contractStart;
   const end = (t.status === 'movedout' && t.movedOutAt) ? monthKey(new Date(t.movedOutAt)) : monthKey();
-  const pays = await store.getAllPaymentsForTenant(t.id);
+  const allPays = await store.getAllPaymentsForTenant(t.id);
+  let bankCount = 0, manualCount = 0;
+  allPays.forEach((p) => { if (p.source === 'bank') bankCount++; else manualCount++; });
+  const pays = bankOnly ? allPays.filter((p) => p.source === 'bank') : allPays;
   const byMonth = {};
   pays.forEach((p) => (byMonth[p.month] || (byMonth[p.month] = [])).push(p));
 
@@ -56,14 +61,14 @@ async function tenantReport(t) {
       groups.push({ month: m, empty: true, rows: [{ date: '', payer: '입금 없음', amount: null }] });
     } else {
       total += ps.reduce((s, p) => s + p.amount, 0);
-      groups.push({ month: m, empty: false, rows: ps.map((p) => ({ date: p.paidAt, payer: p.depositorName || '-', amount: p.amount })) });
+      groups.push({ month: m, empty: false, rows: ps.map((p) => ({ date: p.paidAt, payer: (p.depositorName || '-') + srcTag(p), amount: p.amount, source: p.source })) });
     }
     m = addMonths(m, 1);
   }
   const dates = pays.map((p) => p.paidAt).filter(Boolean).sort();
   return {
-    title: `${t.name}${t.businessName ? '(' + t.businessName + ')' : ''} — 실제 입금내역`,
-    groups, total, empty, months,
+    title: `${t.name}${t.businessName ? '(' + t.businessName + ')' : ''} — 실제 입금내역${bankOnly ? ' (은행 확인분만)' : ''}`,
+    groups, total, empty, months, bankCount, manualCount, bankOnly,
     periodStart: dates[0] || (start + '-01'),
     periodEnd: dates[dates.length - 1] || todayISO(),
   };
@@ -106,8 +111,8 @@ const TCOLS = [
   { label: '개별 입금액', w: 24, align: 'right' },
 ];
 
-export async function exportTenantImage(t) {
-  const rep = await tenantReport(t);
+export async function exportTenantImage(t, opts = {}) {
+  const rep = await tenantReport(t, opts);
   const W = 1240, mx = 70, CW = W - mx * 2;
   const rowH = 58, headerH = 64, titleH = 118, sumH = 150, subH = 56, footH = 66, top = 64;
   const totalRows = rep.groups.reduce((s, g) => s + g.rows.length, 0);
@@ -173,7 +178,7 @@ export async function exportTenantImage(t) {
   cell(ctx, won(rep.total) + '원', colX(3), y, colW(3), footH, { align: 'right', color: C.ink, font: FONT('800 26px') });
   ctx.strokeStyle = hx(C.teal); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, y + 0.5); ctx.lineTo(mx + CW, y + 0.5); ctx.stroke();
 
-  saveCanvas(cv, `입금내역_${unitLabel(t.unit)}_${t.name}.png`);
+  saveCanvas(cv, `입금내역_${unitLabel(t.unit)}_${t.name}${opts.bankOnly ? '_은행확인분' : ''}.png`);
 }
 
 /* ================= 엑셀(.xlsx, 서식 있음) ================= */
@@ -188,10 +193,10 @@ function styleCell(cell, { fill, font, align, numFmt, border = true } = {}) {
   }
 }
 
-export async function exportTenantExcel(t) {
+export async function exportTenantExcel(t, opts = {}) {
   let EJS;
   try { EJS = await loadExcelJS(); } catch (e) { return toast(e.message, 'bad'); }
-  const rep = await tenantReport(t);
+  const rep = await tenantReport(t, opts);
   const wb = new EJS.Workbook();
   const ws = wb.addWorksheet('입금내역', {
     views: [{ showGridLines: false }],
@@ -254,12 +259,12 @@ export async function exportTenantExcel(t) {
   const R = ws.getRow(r); R.height = 26;
   ws.mergeCells(r, 1, r, 3);
   styleCell(R.getCell(1), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'left' } });
-  R.getCell(1).value = `합계 · 빈 달 ${rep.empty}개월`;
+  R.getCell(1).value = `합계 · 빈 달 ${rep.empty}개월 · 은행 ${rep.bankCount}건 / 직접 ${rep.manualCount}건`;
   styleCell(R.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT });
   R.getCell(4).value = rep.total;
 
   const buf = await wb.xlsx.writeBuffer();
-  download(`입금내역_${unitLabel(t.unit)}_${t.name}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  download(`입금내역_${unitLabel(t.unit)}_${t.name}${opts.bankOnly ? '_은행확인분' : ''}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   toast('엑셀 파일을 내려받았어요', 'ok');
 }
 

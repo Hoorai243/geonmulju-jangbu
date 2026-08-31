@@ -293,9 +293,22 @@ function doMoveOut(t) {
   });
 }
 function doDelete(t) {
+  // 삭제 전에: 기록을 먼저 내보내거나, 퇴거로 유도. 그 다음에만 지문/비번 확인.
+  openSheet({
+    title: `${unitLabel(t.unit)} ${t.name} 삭제`,
+    desc: '삭제하면 이 세입자의 모든 입금·보증금 기록이 사라지고 되돌릴 수 없어요. 기록을 남기려면 먼저 내보내세요. (떠난 세입자는 삭제 말고 “퇴거 처리”를 쓰면 기록이 남아요.)',
+    body: (close) => h('div', { class: 'stack' },
+      h('button', { class: 'btn btn--secondary btn--lg', onClick: () => exportTenantExcel(t) }, icon('download'), '먼저 거래내역 내보내기 (엑셀)'),
+      h('div', { class: 'btn-row', style: { marginTop: '4px' } },
+        h('button', { class: 'btn btn--secondary', onClick: close }, '취소'),
+        h('button', { class: 'btn btn--danger', onClick: () => { close(); confirmDelete(t); } }, icon('trash'), '그래도 삭제')),
+    ),
+  });
+}
+function confirmDelete(t) {
   requireAuth({
     title: `${unitLabel(t.unit)} ${t.name} 삭제`,
-    desc: '모든 입금·보증금 기록이 함께 지워지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.',
+    desc: '정말 삭제할까요? 모든 기록이 지워지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.',
     confirmText: '삭제', onConfirm: async () => { await store.deleteTenant(t.id); toast('삭제했어요'); navigate('/tenants', { replace: true }); },
   });
 }

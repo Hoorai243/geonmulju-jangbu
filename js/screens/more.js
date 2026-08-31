@@ -1,12 +1,12 @@
 // 더보기 — 계좌/알림/보안 설정, 건물 정보, 전체 내보내기, 백업.
-import { h, monthKey, openSheet, confirmSheet, toast, clear , unitLabel } from '../util.js';
+import { h, monthKey, openSheet, confirmSheet, toast, clear, unitLabel, formatDate } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner } from '../ui/shell.js';
 import * as store from '../store.js';
 import * as db from '../db.js';
 import * as auth from '../auth/auth.js';
 import { navigate } from '../router.js';
-import { exportBuildingExcel, exportBuildingImage } from '../export/export.js';
+import { exportBuildingExcel, exportBuildingImage, exportTenantExcel, exportTenantImage } from '../export/export.js';
 import { requireAuth } from '../ui/authgate.js';
 import { isNative, ensureMonthEndReminder, cancelMonthEndReminder } from '../notify/native.js';
 import { saveFile, backupNow } from '../export/save-file.js';
@@ -39,6 +39,7 @@ export async function renderMore() {
           link('receipt', '제외·연결 다시 보기', () => navigate('/match-rules')),
           link('receipt', '부가세 · 세금계산서 (상가)', () => navigate('/tax')),
           link('history', '지난 이력 · 밀린 횟수', () => navigate('/history')),
+          link('users', '떠난 세입자 (내역 뽑기)', () => navigate('/left-tenants')),
           link('bank', '입금받는 계좌 관리', () => navigate('/accounts')),
           link('building', '건물 정보 수정', () => editBuilding(building)),
           link('bell', '알림 설정', () => navigate('/notify-settings')),
@@ -57,7 +58,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.28.3'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.29.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -220,6 +221,41 @@ export async function renderNotifySettings() {
         h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '월말 정리 알림'), h('div', { class: 'settingrow__desc' }, '월말에 “은행 파일 받아 정리하세요” 안내 (안드로이드 앱은 앱을 닫아도 알림이 와요)')), mk('bankReminder')),
       ),
       banner('info', { text: '세입자마다 따로 켜고 끄고 싶으면, 그 세입자 화면에서 “이 세입자 알림”을 바꾸면 돼요. 그 설정이 전체 설정보다 우선해요.' }),
+    ),
+  );
+}
+
+/* ---------- 떠난(퇴거) 세입자 모아보기 + 거래내역 내보내기 ---------- */
+export async function renderLeftTenants() {
+  const buildingId = await store.getCurrentBuildingId();
+  const gone = (await store.getTenants(buildingId)).filter((t) => t.status === 'movedout');
+  let bankOnly = false;
+  const cb = h('input', { type: 'checkbox' });
+  cb.onchange = () => { bankOnly = cb.checked; };
+
+  const card = (t) => h('div', { class: 'card' },
+    h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' } },
+      h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)' } }, `${unitLabel(t.unit)} ${t.name}`),
+      t.movedOutAt && h('span', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `퇴거 ${formatDate(t.movedOutAt)}`)),
+    t.businessName && h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '2px' } }, t.businessName),
+    h('div', { class: 'btn-row mt-4' },
+      h('button', { class: 'btn btn--secondary', onClick: () => exportTenantExcel(t, { bankOnly }) }, icon('download'), '엑셀'),
+      h('button', { class: 'btn btn--secondary', onClick: () => exportTenantImage(t, { bankOnly }) }, icon('image'), '이미지')),
+  );
+
+  return screen({ plain: true },
+    topbar({ title: '떠난 세입자', back: '/more' }),
+    h('div', { class: 'stack-lg' },
+      banner('info', { text: '퇴거 처리한 세입자예요. 여기서 그 세입자의 거래내역을 엑셀·이미지로 뽑을 수 있어요. (삭제한 세입자는 기록이 지워져 안 나와요 — 떠난 세입자는 “삭제” 말고 “퇴거 처리”를 쓰세요.)' }),
+      h('div', { class: 'card' },
+        h('div', { class: 'settingrow', style: { padding: 0 } },
+          h('div', { class: 'settingrow__main' },
+            h('div', { class: 'settingrow__title' }, '은행 확인분만 뽑기'),
+            h('div', { class: 'settingrow__desc' }, '켜면 “직접 입력”은 빼고 은행 파일로 확인된 입금만 내보내요(신뢰성↑)')),
+          h('label', { class: 'switch' }, cb, h('span', { class: 'switch__track' })))),
+      gone.length === 0
+        ? banner('info', { text: '아직 퇴거 처리한 세입자가 없어요.' })
+        : h('div', { class: 'stack' }, ...gone.map(card)),
     ),
   );
 }
