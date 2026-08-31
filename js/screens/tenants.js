@@ -39,7 +39,7 @@ function unitBox(unit) {
   let lines;
   if (u.includes(' ')) lines = u.split(/\s+/).filter(Boolean);   // 띄어쓰기 있으면 그 단위로
   else if (len <= 3) lines = [u];                                 // 3글자 이하는 한 줄
-  else { const half = Math.ceil(len / 2); lines = [chars.slice(0, half).join(''), chars.slice(half).join('')]; }
+  else { const half = Math.floor(len / 2); lines = [chars.slice(0, half).join(''), chars.slice(half).join('')]; } // 홀수면 뒤 줄이 한 글자 더(예: 미래/부동산)
   const maxLine = Math.max(...lines.map((l) => [...l].length));
   const fs = maxLine <= 2 ? '0.95rem' : maxLine === 3 ? '0.76rem' : '0.6rem';
   return h('div', { style: {
