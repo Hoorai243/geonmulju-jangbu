@@ -1,5 +1,5 @@
 // 이번 달 현황판 — 핵심 화면. 상태색 목록 + 입금 확인 + 미확인 입금.
-import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear, append, unitLabel } from '../util.js';
+import { h, won, monthKey, formatMonth, addMonths, compareMonth, todayISO, openSheet, toast, clear, append, unitLabel, confirmSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, statusChip, banner, STATUS } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -208,7 +208,7 @@ function unmatchedCard(p, tenants, refresh, isFirst) {
             close(); toast('세입자에 연결했어요', 'ok'); refresh();
           },
         }, icon('check'), '이 세입자로 연결'),
-        h('button', { class: 'btn btn--ghost', onClick: async () => { await store.deletePayment(p.id); close(); toast('삭제했어요'); refresh(); } }, icon('trash'), '이 입금 삭제'),
+        h('button', { class: 'btn btn--ghost', onClick: () => confirmSheet({ title: '이 입금을 지울까요?', desc: `입금자명 ${p.depositorName || '(없음)'} · ${won(p.amount)}원 기록을 지워요. 세입자에 연결하지 않고 지우면 이 입금은 사라져요.`, confirmText: '지우기', danger: true, onConfirm: async () => { await store.deletePayment(p.id); close(); toast('지웠어요', 'ok'); refresh(); } }) }, icon('trash'), '이 입금 삭제'),
       );
     },
   });

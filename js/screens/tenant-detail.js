@@ -104,7 +104,7 @@ export async function renderTenantDetail({ params }) {
             h('div', { class: 'grow' },
               h('div', { style: { fontWeight: 700 } }, `${formatMonth(hh.from)}부터`),
               h('div', { class: 'muted' }, `월세 ${won(hh.rent)} · 관리비 ${won(hh.fee)}`)),
-            (t.rentHistory.length > 1) && h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: async () => { await store.deleteRateChange(t.id, hh.from); toast('삭제했어요'); refresh(); } }, icon('trash')),
+            (t.rentHistory.length > 1) && h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: () => confirmSheet({ title: '이 요금 변경을 지울까요?', desc: `${formatMonth(hh.from)}부터의 요금(월세 ${won(hh.rent)}·관리비 ${won(hh.fee)})을 지워요. 그 기간은 이전 요금으로 계산돼요.`, confirmText: '지우기', onConfirm: async () => { await store.deleteRateChange(t.id, hh.from); toast('지웠어요', 'ok'); refresh(); } }) }, icon('trash')),
           )),
           h('button', { class: 'btn btn--secondary btn--block', onClick: () => openRateChange(t, refresh) }, icon('plus'), '요금 변경 등록'),
           banner('info', { text: '요금을 바꿔도, 바꾸기 전 달의 미납은 예전 금액 그대로 계산돼요.' }),

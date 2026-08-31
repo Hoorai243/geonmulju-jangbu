@@ -1,5 +1,5 @@
 // 처음 시작 — 비밀번호 만들기 → 지문/생체(선택) → 건물 등록 → 계좌 등록(선택).
-import { h, clear, toast } from '../util.js';
+import { h, clear, toast, confirmSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { banner } from '../ui/shell.js';
 import * as auth from '../auth/auth.js';
@@ -115,7 +115,7 @@ async function stepAccounts({ state, go }) {
       listWrap.appendChild(h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
         icon('bank', { cls: '' }),
         h('div', { class: 'grow' }, h('div', { style: { fontWeight: 700 } }, a.bankName), a.alias && h('div', { class: 'muted' }, a.alias)),
-        h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: async () => { await store.deleteAccount(a.id); refresh(); } }, icon('trash')),
+        h('button', { class: 'iconbtn', 'aria-label': '삭제', onClick: () => confirmSheet({ title: '계좌를 지울까요?', desc: `${a.bankName}${a.alias ? ' · ' + a.alias : ''}`, confirmText: '삭제', danger: true, onConfirm: async () => { await store.deleteAccount(a.id); refresh(); } }) }, icon('trash')),
       ));
     }
   }
