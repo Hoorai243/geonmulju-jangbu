@@ -77,7 +77,9 @@ export async function renderDashboard({ query } = { query: {} }) {
 
     // 세입자 상태 목록
     tenants.length === 0
-      ? banner('info', { title: '세입자를 먼저 등록해요', text: '“세입자” 탭에서 등록하면 여기에서 입금을 확인할 수 있어요.' })
+      ? h('div', { class: 'stack' },
+        banner('info', { title: '세입자를 먼저 등록해요', text: '세입자를 등록하면 여기에서 매달 입금을 확인할 수 있어요.' }),
+        h('button', { class: 'btn btn--primary btn--lg', onClick: () => navigate('/tenant/new') }, icon('plus'), '세입자 등록하러 가기'))
       : h('div', {},
         h('div', { class: 'section-title' }, '세입자별 상태'),
         h('div', { class: 'stack' }, ...rows.map((r, i) => tenantRow(r, month, refresh, i === 0))),

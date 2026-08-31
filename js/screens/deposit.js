@@ -175,13 +175,16 @@ function openEvent(t, type, refresh, prefill, accounts = []) {
             await store.addLedger({ tenantId: t.id, type, amount: amt, category, memo: memo.value, date: date.value, accountId });
             close(); toast('기록했어요', 'ok'); refresh();
           };
-          // 환불·차감이 현재 보관액보다 많으면 한 번 더 확인(실수 방지)
+          // 실수 방지 경고(막지 않고 한 번 더 확인): 미래 날짜, 보관액 초과
+          const warns = [];
+          if (date.value && date.value > todayISO()) warns.push('날짜가 아직 오지 않은 미래 날짜예요.');
           if (type === 'refund' || type === 'deduct') {
             const held = store.depositSummary(await store.getLedger(t.id)).held;
-            if (amt > held) {
-              confirmSheet({ title: '보관액보다 많아요', desc: `현재 보관 중인 보증금은 ${won(held)}원인데 ${won(amt)}원을 ${type === 'refund' ? '환불' : '차감'}하려고 해요. 그래도 기록할까요?`, confirmText: '그대로 기록', onConfirm: doSave });
-              return;
-            }
+            if (amt > held) warns.push(`지금 보관 중(${won(held)}원)보다 많은 금액을 ${type === 'refund' ? '환불' : '차감'}하려고 해요.`);
+          }
+          if (warns.length) {
+            confirmSheet({ title: '한 번 더 확인해 주세요', desc: warns.join(' ') + ' 그래도 기록할까요?', confirmText: '그대로 기록', onConfirm: doSave });
+            return;
           }
           await doSave();
         },

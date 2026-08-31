@@ -109,6 +109,7 @@ export async function renderTenantDetail({ params }) {
           )),
           h('button', { class: 'btn btn--secondary btn--block', onClick: () => openRateChange(t, refresh) }, icon('plus'), '요금 변경 등록'),
           banner('info', { text: '요금을 바꿔도, 바꾸기 전 달의 미납은 예전 금액 그대로 계산돼요.' }),
+          banner('info', { text: '과거 달부터 세고 싶으면(밀림 포함) 위쪽 “수정”에서 “계약 시작월”을 앞당기세요. 반대로 최근 달만 보려면 “장부 시작월”에 그 달을 넣으면 그 전은 밀림에 안 잡혀요.' }),
         ),
       ),
 
