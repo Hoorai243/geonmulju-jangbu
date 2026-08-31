@@ -2,7 +2,7 @@
 // 손으로 빠르게 완납 처리하려는 기능. 나중에 오픈뱅킹 자동연동이 되면 제거 후보.
 // [제거 방법] 이 파일 삭제 + app.js 의 '/quick-pay' 라우트/임포트 제거
 //            + dashboard.js 의 "한 번에 확인" 버튼 제거.
-import { h, won, monthKey, addMonths, formatMonth, toast , unitLabel } from '../util.js';
+import { h, won, monthKey, addMonths, formatMonth, toast, unitLabel, confirmSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner, statusChip } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -64,7 +64,7 @@ export async function renderQuickPay({ query } = { query: {} }) {
   function selectAll(only) {
     selected.clear();
     for (const r of rowEls) {
-      const pick = only === 'last' ? r.paidLast : true;
+      const pick = only === 'none' ? false : only === 'last' ? r.paidLast : true;
       if (pick) { selected.add(r.tenant.id); r.box.className = 'paycheck paycheck--on'; r.el.style.borderColor = 'var(--ok-solid)'; r.el.setAttribute('aria-pressed', 'true'); }
       else { r.box.className = 'paycheck'; r.el.style.borderColor = 'var(--line)'; r.el.setAttribute('aria-pressed', 'false'); }
     }
@@ -73,11 +73,21 @@ export async function renderQuickPay({ query } = { query: {} }) {
 
   async function apply() {
     const list = rows.filter((r) => selected.has(r.tenant.id));
-    for (const { tenant, st } of list) {
-      await store.addPayment({ buildingId, tenantId: tenant.id, month, amount: st.remaining, depositorName: tenant.name, source: 'manual', note: '한 번에 확인' });
-    }
-    toast(`${list.length}명 완납 처리했어요`, 'ok');
-    navigate('/?m=' + month);
+    if (!list.length) return;
+    const totalAmt = list.reduce((s, r) => s + r.st.remaining, 0);
+    // 여러 명을 한꺼번에 완납 기록하는 큰 작업이라 한 번 더 확인(실수 방지)
+    confirmSheet({
+      title: `${list.length}명을 완납 처리할까요?`,
+      desc: `고른 ${list.length}명에게 남은 금액 합계 ${won(totalAmt)}원을 “완납”으로 기록해요. 통장 내역과 맞는지 확인하세요. (잘못 넣었으면 각 세입자 화면에서 지울 수 있어요)`,
+      confirmText: '완납 처리',
+      onConfirm: async () => {
+        for (const { tenant, st } of list) {
+          await store.addPayment({ buildingId, tenantId: tenant.id, month, amount: st.remaining, depositorName: tenant.name, source: 'manual', note: '한 번에 확인' });
+        }
+        toast(`${list.length}명 완납 처리했어요`, 'ok');
+        navigate('/?m=' + month);
+      },
+    });
   }
 
   const hasLast = rowEls.some((r) => r.paidLast);
