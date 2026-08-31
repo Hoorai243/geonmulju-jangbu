@@ -1,6 +1,6 @@
 // 서비스워커 — 오프라인에서도 앱이 열리게 앱 파일을 저장(캐시)한다.
 // 저장 방식이 바뀌면 CACHE 이름의 버전을 올려 새로 받게 한다.
-const CACHE = 'jangbu-v57';
+const CACHE = 'jangbu-v58';
 const CORE = [
   './',
   './index.html',

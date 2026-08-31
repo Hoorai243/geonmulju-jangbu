@@ -91,7 +91,7 @@ export async function renderDashboard({ query } = { query: {} }) {
       runCoachQueue([
         {
           target: 'coach-paycheck', seenKey: 'paycheck', title: '여기서 입금을 확인해요',
-          text: '이 네모를 누르면 이번 달 입금이 완납(초록)으로 바뀌어요. 잘못 눌렀으면 색칠된 네모를 다시 눌러 입금 내역을 열고, 거기서 휴지통을 누르면 되돌려져요.',
+          text: '이 네모를 누르면 입금 확인 창이 열려요. 받은 금액을 확인하고 저장하면 완납(초록)으로 바뀌어요. 이미 낸 세입자는 네모를 누르면 입금 내역이 열리고, 거기서 휴지통으로 되돌릴 수 있어요.',
         },
         {
           target: 'coach-status', seenKey: 'statusColors', title: '색과 숫자 뜻',
