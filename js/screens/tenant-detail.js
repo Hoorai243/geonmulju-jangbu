@@ -30,6 +30,11 @@ export async function renderTenantDetail({ params }) {
     mini.push({ m, s: (carry.map.get(m) || { state: 'idle' }).state });
   }
 
+  setTimeout(() => coachMark({
+    target: 'coach-months', seenKey: 'pastMonth', title: '지난 달도 여기서 기록해요',
+    text: '각 달 동그라미를 누르면 그 달 입금을 기록하거나, 잘못된 건 되돌릴 수 있어요. 예전 달 입금을 빠뜨렸을 때 여기서 채워 넣으세요.',
+  }), 500);
+
   return screen({ plain: true },
     topbar({
       title: `${t.unit}호`, sub: t.name, back: '/tenants',
@@ -80,10 +85,13 @@ export async function renderTenantDetail({ params }) {
           icon('check'), st.state === 'ok' ? '입금 더 기록' : '입금 확인'),
       ),
 
-      // 최근 6개월
+      // 최근 6개월 — 각 달을 눌러 그 달 입금을 기록하거나 되돌릴 수 있음
       h('div', {},
-        h('div', { class: 'section-title' }, '최근 6개월'),
-        h('div', { style: { display: 'flex', gap: '6px' } }, ...mini.map((x) => h('div', { style: { flex: 1, textAlign: 'center' } },
+        h('div', { class: 'section-title' }, '최근 6개월 (눌러서 기록/되돌리기)'),
+        h('div', { id: 'coach-months', style: { display: 'flex', gap: '6px' } }, ...mini.map((x) => h('button', {
+          style: { flex: 1, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', borderRadius: '10px' },
+          'aria-label': `${formatMonth(x.m)} 입금 기록`, onClick: () => openMonthSheet(t, x.m, refresh),
+        },
           h('div', { class: 'dot dot--' + statusCls(x.s), style: { width: '20px', height: '20px', margin: '0 auto 6px' } }),
           h('div', { class: 'muted', style: { fontSize: '0.8rem' } }, formatMonth(x.m).replace(/^\d+년 /, ''))))),
       ),
@@ -135,6 +143,43 @@ export async function renderTenantDetail({ params }) {
 const dt = (x) => h('dt', {}, x);
 const dd = (x) => h('dd', {}, x);
 function statusCls(s) { return s === 'ok' ? 'ok' : s === 'part' ? 'warn' : s === 'bad' ? 'bad' : 'idle'; }
+
+// 특정 달(지난 달 포함) 입금 보기/기록/되돌리기
+async function openMonthSheet(t, m, refresh) {
+  const pays = await store.getPaymentsForTenantMonth(t.id, m);
+  const rate = store.ratesForMonth(t, m);
+  const led = await store.tenantLedger(t, m);
+  const st = led.map.get(m) || { state: 'idle', due: rate.total, paid: 0, remaining: rate.total };
+
+  openSheet({
+    title: `${formatMonth(m)} 입금`,
+    desc: `${t.unit}호 ${t.name}`,
+    body: (close) => {
+      const removePay = (p) => {
+        const doDel = async () => { await store.deletePayment(p.id); toast('되돌렸어요', 'ok'); close(); refresh(); };
+        if (p.source === 'bank') confirmSheet({ title: '이 입금을 지울까요?', desc: '은행에서 확인된 입금이에요. 지우면 이 달 상태가 바뀔 수 있어요.', confirmText: '지우기', onConfirm: doDel });
+        else doDel();
+      };
+      const payRow = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+        h('div', { class: 'grow' },
+          h('div', { style: { fontWeight: 800 } }, won(p.amount) + '원'),
+          h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${p.depositorName || '입금'} · ${p.source === 'bank' ? '은행 확인' : '직접 입력'}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`)),
+        h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: () => removePay(p) }, icon('trash')),
+      );
+      return h('div', { class: 'stack' },
+        h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('span', { class: 'muted' }, '이 달 청구'), h('span', { class: 'amount won' }, won(rate.total))),
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: '6px', alignItems: 'center' } }, h('span', { class: 'muted' }, '상태'), statusChip(st.state)),
+          st.remaining > 0 && st.state !== 'idle' && h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: '6px', color: 'var(--bad-ink)' } }, h('span', {}, '남은'), h('span', { class: 'amount won' }, won(st.remaining))),
+        ),
+        pays.length
+          ? h('div', {}, h('div', { class: 'section-title' }, '기록된 입금'), h('div', { class: 'stack' }, ...pays.map(payRow)))
+          : banner('info', { text: '아직 이 달 입금 기록이 없어요. 아래 버튼으로 넣으세요.' }),
+        h('button', { class: 'btn btn--primary btn--lg', onClick: () => { close(); openConfirmForTenant({ tenant: t, month: m, prefillAmount: st.remaining || rate.total, onDone: refresh }); } }, icon('plus'), '이 달 입금 기록'),
+      );
+    },
+  });
+}
 
 function openRateChange(t, refresh) {
   const from = h('input', { class: 'input', type: 'month', value: monthKey() });

@@ -31,8 +31,8 @@ export async function renderLogin() {
   );
   const showPw = () => { pwSection.style.display = 'block'; setTimeout(() => pw.focus(), 50); };
 
-  // 열면 바로 생체 시도(자동). 브라우저가 막으면 조용히 버튼만 남김.
-  if (bioOk) setTimeout(() => doBio(true), 350);
+  // 자동 지문 시도는 하지 않는다. 앱이 막 켜진 순간(WebView 준비 전)에 지문창을 띄우면
+  // 인식돼도 결과가 씹혀 로그인이 안 되는 문제가 있었다. 큰 "지문·생체로 열기" 버튼을 누르면 확실히 된다.
 
   return screen({ plain: true },
     h('div', { class: 'brand' },
