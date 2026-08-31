@@ -52,11 +52,11 @@ export async function renderMore() {
           link('history', '백업 파일 불러오기', restore),
         ),
         h('div', { style: { marginTop: 'var(--sp-4)' } },
-          banner('info', { text: '이 앱은 이 기기 안에만 저장돼요. 기기를 바꾸거나 지울 때를 대비해 가끔 백업 파일을 저장해 두면 안전해요.' })),
+          banner('info', { text: '이 앱은 이 기기 안에만 저장돼요. 가끔 백업 파일을 저장해 두면 안전해요. 백업은 비밀번호로 잠기니(암호화), 카톡·드라이브에 보관해도 안심이에요. 비밀번호는 잊지 마세요.' })),
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.24.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.25.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -78,17 +78,37 @@ function editBuilding(building) {
 async function backup() {
   await backupNow();
 }
+function promptBackupPassword(onPassword) {
+  const pw = h('input', { class: 'input', type: 'password', inputmode: 'numeric', placeholder: '백업 비밀번호', autocomplete: 'current-password' });
+  let ctrl;
+  const go = () => { const p = pw.value; if (!p) return toast('비밀번호를 입력해 주세요.', 'bad'); ctrl.close(); onPassword(p); };
+  pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  ctrl = openSheet({
+    title: '백업 비밀번호', desc: '백업할 때 정한 비밀번호를 입력하세요.',
+    body: () => h('div', { class: 'stack' },
+      h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, '비밀번호'), pw),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: go }, '열기')),
+  });
+  setTimeout(() => pw.focus(), 100);
+}
 function restore() {
-  const input = h('input', { type: 'file', accept: 'application/json,.json', style: { display: 'none' } });
+  const input = h('input', { type: 'file', accept: '.jbk,.json,application/json', style: { display: 'none' } });
   input.onchange = async () => {
     const file = input.files[0]; if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      requireAuth({
-        title: '백업 불러오기', desc: '지금 저장된 내용이 백업 파일 내용으로 덮어써지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.', confirmText: '불러오기',
-        onConfirm: async () => { await db.importAll(data); toast('불러왔어요', 'ok'); navigate('/', { replace: true }); },
+    let parsed;
+    try { parsed = JSON.parse(await file.text()); } catch { return toast('백업 파일을 읽을 수 없어요.', 'bad'); }
+    const doImport = (data) => requireAuth({
+      title: '백업 불러오기', desc: '지금 저장된 내용이 백업 파일 내용으로 덮어써지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.', confirmText: '불러오기',
+      onConfirm: async () => { await db.importAll(data); toast('불러왔어요', 'ok'); navigate('/', { replace: true }); },
+    });
+    if (auth.isEncryptedBackup(parsed)) {
+      promptBackupPassword(async (p) => {
+        try { doImport(await auth.decryptBackup(p, parsed)); }
+        catch { toast('비밀번호가 맞지 않아요.', 'bad'); }
       });
-    } catch { toast('백업 파일을 읽을 수 없어요.', 'bad'); }
+    } else {
+      doImport(parsed); // 예전(암호화 전) 백업도 열 수 있게
+    }
   };
   document.body.appendChild(input); input.click(); setTimeout(() => input.remove(), 1000);
 }

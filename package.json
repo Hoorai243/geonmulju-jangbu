@@ -1,6 +1,6 @@
 {
   "name": "geonmulju-jangbu",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "description": "건물주 장부 — 월세·관리비·보증금 관리 PWA (정적 파일, 빌드 불필요)",
   "type": "module",
   "private": true,
@@ -8,7 +8,7 @@
     "icons": "node icons/generate-icons.mjs",
     "start": "node scripts/dev-server.mjs",
     "build:www": "node scripts/build-www.mjs",
-    "sync": "npm run build:www && npx cap sync android",
+    "sync": "npm run build:www && npx cap sync android && node scripts/patch-android.mjs",
     "android": "npm run sync && npx cap open android"
   },
   "devDependencies": {

@@ -1,7 +1,8 @@
 // 파일 저장 — 웹은 브라우저 다운로드, 안드로이드 앱은 파일로 저장 후 "공유(저장/보내기)" 창.
 // WebView 는 <a download> 로 파일이 안 받아지므로 네이티브에선 Filesystem + Share 를 쓴다.
-import { toast, monthKey } from '../util.js';
+import { toast, monthKey, h, openSheet } from '../util.js';
 import * as db from '../db.js';
+import * as auth from '../auth/auth.js';
 
 function cap() { return typeof window !== 'undefined' ? window.Capacitor : undefined; }
 function isNative() { const c = cap(); return !!(c && c.isNativePlatform && c.isNativePlatform()); }
@@ -50,11 +51,32 @@ export async function saveFile(filename, blob) {
   }
 }
 
-// 전체 백업 파일 저장 + 마지막 백업 날짜 기록
+// 전체 백업 — 비밀번호로 잠근(암호화) 파일로 저장 + 마지막 백업 날짜 기록
 export async function backupNow() {
-  const data = await db.exportAll();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const r = await saveFile(`건물주장부_백업_${monthKey()}.json`, blob);
-  if (r.ok) await db.metaSet('lastBackupAt', new Date().toISOString());
-  return r;
+  const pw = h('input', { class: 'input', type: 'password', inputmode: 'numeric', placeholder: '백업에 걸 비밀번호', autocomplete: 'new-password' });
+  const pw2 = h('input', { class: 'input', type: 'password', inputmode: 'numeric', placeholder: '한 번 더', autocomplete: 'new-password' });
+  const fld = (label, input) => h('div', { class: 'field', style: { margin: 0 } }, h('label', { class: 'label' }, label), input);
+
+  return new Promise((resolve) => {
+    let ctrl;
+    const go = async () => {
+      const p = pw.value;
+      if (p.length < 4) return toast('비밀번호는 4자 이상으로 정해 주세요.', 'bad');
+      if (p !== pw2.value) return toast('두 비밀번호가 서로 달라요.', 'bad');
+      try {
+        const enc = await auth.encryptBackup(p, await db.exportAll());
+        const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
+        const r = await saveFile(`건물주장부_백업_${monthKey()}.jbk`, blob);
+        if (r.ok) await db.metaSet('lastBackupAt', new Date().toISOString());
+        ctrl.close(); resolve(r);
+      } catch (e) { console.warn('백업 실패', e); toast('백업에 실패했어요.', 'bad'); }
+    };
+    ctrl = openSheet({
+      title: '백업 파일 잠그기',
+      desc: '이 비밀번호가 있어야 백업을 열 수 있어요. 앱 비밀번호와 같아도 돼요. 비밀번호를 잊으면 이 백업은 못 열어요.',
+      body: () => h('div', { class: 'stack' }, fld('비밀번호', pw), fld('비밀번호 확인', pw2),
+        h('button', { class: 'btn btn--primary btn--lg', onClick: go }, '잠그고 저장')),
+    });
+    setTimeout(() => pw.focus(), 100);
+  });
 }

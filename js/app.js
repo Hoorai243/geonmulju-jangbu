@@ -4,6 +4,7 @@ import { route, setNotFound, setBeforeEach, startRouter, navigate } from './rout
 import * as auth from './auth/auth.js';
 import * as store from './store.js';
 import { isNative, ensureMonthEndReminder, cancelMonthEndReminder, wireNotificationTap } from './notify/native.js';
+import { startAutoLock } from './auth/autolock.js';
 
 import { renderOnboarding } from './screens/onboarding.js';
 import { renderLogin } from './screens/login.js';
@@ -76,6 +77,7 @@ async function boot() {
   setNotFound(renderDashboard);
 
   startRouter();
+  startAutoLock();
 }
 
 // 전역 노출(개발/디버그 편의)

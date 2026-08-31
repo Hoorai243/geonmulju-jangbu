@@ -45,6 +45,11 @@ npm run sync                # www 다시 만들고 안드로이드에 복사
 ```
 그다음 안드로이드 스튜디오에서 다시 Run.
 
+## 보안 (자동 적용)
+- `npm run sync`(및 `npm run android`)가 끝에 `node scripts/patch-android.mjs`를 실행해
+  MainActivity 에 **FLAG_SECURE**(스크린샷 차단·앱 전환 미리보기 가림)를 자동으로 넣는다.
+- `android/` 를 지우고 다시 만든 경우에도 `npm run sync` 한 번이면 다시 적용된다.
+
 ## 월말 알림 동작
 - 매달 **25일 오전 10시**에 "은행 앱에서 거래내역 받아 정리하세요" 알림.
 - 날짜는 알림 설정의 값(`bankReminderDay`, 기본 25)을 따른다.

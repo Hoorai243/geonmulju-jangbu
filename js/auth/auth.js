@@ -43,6 +43,26 @@ export async function changePassword(oldPw, newPw) {
   return true;
 }
 
+/* ---------- 백업 파일 암호화 (AES-GCM, 비밀번호로 잠금) ---------- */
+async function deriveAesKey(pw, saltBytes, iter = ITER) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: saltBytes, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+export async function encryptBackup(pw, obj) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveAesKey(pw, salt);
+  const plain = new TextEncoder().encode(JSON.stringify(obj));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain);
+  return { jangbu_backup: 1, enc: 'aes-gcm', iter: ITER, salt: b64.enc(salt), iv: b64.enc(iv), data: b64.enc(ct) };
+}
+export function isEncryptedBackup(file) { return !!(file && file.jangbu_backup && file.enc === 'aes-gcm'); }
+export async function decryptBackup(pw, file) {
+  const key = await deriveAesKey(pw, b64.dec(file.salt), file.iter || ITER);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64.dec(file.iv) }, key, b64.dec(file.data));
+  return JSON.parse(new TextDecoder().decode(pt)); // 비번 틀리면 예외
+}
+
 /* ---------- 세션 ---------- */
 const SESSION_KEY = 'jangbu.unlocked';
 export function isUnlocked() { return sessionStorage.getItem(SESSION_KEY) === '1'; }
