@@ -31,16 +31,22 @@ export async function renderTenants() {
   );
 }
 
-// 호실/상호 네모 — 글자 수에 따라 폰트 줄이고, 넘치면 네모 안에서 두 줄로.
+// 호실/상호 네모 — 4글자 이상 상호는 가운데서 반으로(2+2 등) 균형 있게 두 줄로 나눠 보여준다.
 function unitBox(unit) {
   const u = unit || '—';
-  const len = [...u].length;
-  const fs = len <= 2 ? '1.05rem' : len === 3 ? '0.9rem' : len === 4 ? '0.78rem' : '0.64rem';
+  const chars = [...u];
+  const len = chars.length;
+  let lines;
+  if (u.includes(' ')) lines = u.split(/\s+/).filter(Boolean);   // 띄어쓰기 있으면 그 단위로
+  else if (len <= 3) lines = [u];                                 // 3글자 이하는 한 줄
+  else { const half = Math.ceil(len / 2); lines = [chars.slice(0, half).join(''), chars.slice(half).join('')]; }
+  const maxLine = Math.max(...lines.map((l) => [...l].length));
+  const fs = maxLine <= 2 ? '0.95rem' : maxLine === 3 ? '0.76rem' : '0.6rem';
   return h('div', { style: {
     width: '52px', height: '52px', borderRadius: '12px', background: 'var(--primary-tint)', color: 'var(--primary-press)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: fs, flex: 'none',
-    overflow: 'hidden', wordBreak: 'break-all', lineHeight: '1.1', textAlign: 'center', padding: '3px', boxSizing: 'border-box',
-  } }, u);
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: fs, flex: 'none',
+    overflow: 'hidden', lineHeight: '1.12', textAlign: 'center', padding: '3px', boxSizing: 'border-box',
+  } }, ...lines.map((l) => h('div', {}, l)));
 }
 
 async function row(t, month, movedout = false) {
