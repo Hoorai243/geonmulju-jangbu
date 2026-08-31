@@ -1,5 +1,5 @@
 // 튜토리얼(코치마크) — 특정 요소를 강조하고 설명을 띄운다. 한 번 본 건 다시 안 뜬다.
-import { h } from '../util.js';
+import { h, syncBodyScroll } from '../util.js';
 import * as db from '../db.js';
 
 export async function hasSeenCoach(key) { return !!(await db.metaGet('coach:' + key)); }
@@ -33,8 +33,9 @@ export async function coachMark({ target, title, text, seenKey, buttonText = '�
   const pad = 8;
 
   await new Promise((resolve) => {
-    const layer = h('div');
-    const dismiss = () => { layer.remove(); activeCoach = false; if (seenKey) markSeenCoach(seenKey); resolve(); };
+    // class 'coach-layer' 로 표시해 두면 syncBodyScroll 이 뒤 배경 스크롤을 막는다("알겠어요" 전까지).
+    const layer = h('div', { class: 'coach-layer' });
+    const dismiss = () => { layer.remove(); syncBodyScroll(); activeCoach = false; if (seenKey) markSeenCoach(seenKey); resolve(); };
 
     const backdrop = h('div', { style: { position: 'fixed', inset: '0', zIndex: '199' }, onClick: dismiss });
     const hole = h('div', { style: {
@@ -56,6 +57,7 @@ export async function coachMark({ target, title, text, seenKey, buttonText = '�
 
     layer.append(backdrop, hole, card);
     document.body.appendChild(layer);
+    syncBodyScroll();
 
     // 위치: 아래 공간 있으면 아래, 없으면 위, 그래도 안 되면 화면 안에 맞춤(전체가 보이게)
     const ch = card.offsetHeight;

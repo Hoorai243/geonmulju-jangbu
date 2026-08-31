@@ -89,6 +89,16 @@ export function toast(msg, kind = '') {
 }
 
 /* ---------- 바텀 시트 ---------- */
+/* ---------- 뒤 배경 스크롤 잠금 (시트·코치가 떠 있을 때) ---------- */
+// DOM 상태를 보고 다시 계산한다(겹쳐 열려도 어긋나지 않음). 시트 내부 스크롤(.sheet)은 그대로 둔다.
+export function syncBodyScroll() {
+  const root = document.getElementById('sheet-root');
+  const anyOverlay = !!(root && root.childElementCount > 0) || !!document.querySelector('.coach-layer');
+  const v = anyOverlay ? 'hidden' : '';
+  document.documentElement.style.overflow = v;
+  document.body.style.overflow = v;
+}
+
 export function openSheet({ title, desc, body, onClose } = {}) {
   const root = document.getElementById('sheet-root');
   const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' },
@@ -102,7 +112,7 @@ export function openSheet({ title, desc, body, onClose } = {}) {
     if (closed) return; closed = true;
     backdrop.style.animation = 'fade .15s ease reverse';
     sheet.style.animation = 'slideup .2s ease reverse';
-    setTimeout(() => { backdrop.remove(); onClose && onClose(); }, 180);
+    setTimeout(() => { backdrop.remove(); syncBodyScroll(); onClose && onClose(); }, 180);
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('popstate', onPop);
   };
@@ -120,6 +130,7 @@ export function openSheet({ title, desc, body, onClose } = {}) {
   window.addEventListener('popstate', onPop);
   if (body) append(sheet, [typeof body === 'function' ? body(close) : body]);
   clear(root).appendChild(backdrop);
+  syncBodyScroll();
   return { close, sheet };
 }
 
