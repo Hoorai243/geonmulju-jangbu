@@ -69,6 +69,9 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: none;
+  /* 한국어: 단어(어절)를 통째로 두고 띄어쓰기에서만 줄바꿈. 아주 긴 단어만 어쩔 수 없이 끊음 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 숫자는 표에서 자리 맞춤 */
@@ -129,8 +132,8 @@ input, textarea { caret-color: var(--primary); }
   min-height: var(--tap); padding: 0 var(--sp-5);
   font-family: inherit; font-size: var(--fs-lg); font-weight: 700;
   border-radius: var(--r-md); border: 2px solid transparent;
-  cursor: pointer; text-decoration: none; line-height: 1;
-  white-space: nowrap;
+  cursor: pointer; text-decoration: none; line-height: 1.25;
+  white-space: normal; word-break: keep-all; text-align: center;
   transition: background .15s ease, transform .05s ease, border-color .15s ease;
   -webkit-tap-highlight-color: transparent;
 }
@@ -374,7 +377,7 @@ textarea.input { padding: var(--sp-3) var(--sp-4); min-height: 120px; resize: ve
 .linkrow:last-child { border-bottom: none; }
 .linkrow:hover { background: var(--surface-2); }
 .linkrow svg.lead { width: 26px; height: 26px; color: var(--primary); flex: none; }
-.linkrow__label { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.linkrow__label { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: break-word; }
 .linkrow .linkrow__chev { flex: none; color: var(--ink-3); }
 
 /* 유틸 */
