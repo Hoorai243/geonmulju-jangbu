@@ -22,7 +22,7 @@ export function unpaidMessage(tenant, month, remaining) {
   return `[임대료 안내] ${tenant.unit}호 ${tenant.name}님, ${formatMonth(month)} 임대료 중 ${won(remaining)}원이 아직 확인되지 않았습니다. 확인 부탁드립니다.`;
 }
 export function expiryMessage(tenant) {
-  return `[계약 안내] ${tenant.unit}호 ${tenant.name}님, 계약 만료가 다가옵니다(${formatMonth(tenant.contractEnd)}). 재계약 여부를 상의드리고자 합니다.`;
+  return `[계약 안내] ${tenant.unit}호 ${tenant.name}님, 계약 만료가 다가옵니다(${formatMonth(tenant.contractEnd)}).`;
 }
 
 /* ---------- 발송 ---------- */
