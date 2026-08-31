@@ -156,9 +156,18 @@ async function openMonthSheet(t, m, refresh) {
     desc: `${t.unit}호 ${t.name}`,
     body: (close) => {
       const removePay = (p) => {
+        // 되돌리면 이 달이 어떤 상태가 되는지 미리 보여준다
+        const due = rate.total;
+        const newPaid = Math.max(0, (st.paid || 0) - p.amount);
+        const newState = due > 0 && newPaid >= due ? 'ok' : newPaid > 0 ? 'part' : (store.isOverdue(t, m) ? 'bad' : 'idle');
+        const label = { ok: '완납', part: '부분납부', bad: '미납', idle: '미확인' }[newState];
         const doDel = async () => { await store.deletePayment(p.id); toast('되돌렸어요', 'ok'); close(); refresh(); };
-        if (p.source === 'bank') confirmSheet({ title: '이 입금을 지울까요?', desc: '은행에서 확인된 입금이에요. 지우면 이 달 상태가 바뀔 수 있어요.', confirmText: '지우기', onConfirm: doDel });
-        else doDel();
+        confirmSheet({
+          title: '이 입금을 되돌릴까요?',
+          desc: `${won(p.amount)}원을 지우면 ${formatMonth(m)}이 "${label}"(으)로 바뀌어요.` + (p.source === 'bank' ? ' 은행에서 확인된 입금이에요.' : ''),
+          confirmText: '되돌리기',
+          onConfirm: doDel,
+        });
       };
       const payRow = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
         h('div', { class: 'grow' },

@@ -35,6 +35,7 @@ export async function renderMore() {
         h('div', { class: 'linklist' },
           link('download', '은행 파일로 입금 정리', () => navigate('/bank-import')),
           link('info', '거래내역 받는 법 (은행별)', () => navigate('/bank-guide')),
+          link('receipt', '제외·연결 다시 보기', () => navigate('/match-rules')),
           link('receipt', '부가세 · 세금계산서 (상가)', () => navigate('/tax')),
           link('history', '지난 이력 · 밀린 횟수', () => navigate('/history')),
           link('bank', '입금받는 계좌 관리', () => navigate('/accounts')),
@@ -55,7 +56,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.22.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.23.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -198,6 +199,45 @@ export async function renderNotifySettings() {
         h('div', { class: 'settingrow' }, h('div', { class: 'settingrow__main' }, h('div', { class: 'settingrow__title' }, '월말 정리 알림'), h('div', { class: 'settingrow__desc' }, '월말에 “은행 파일 받아 정리하세요” 안내 (안드로이드 앱은 앱을 닫아도 알림이 와요)')), mk('bankReminder')),
       ),
       banner('info', { text: '세입자마다 따로 켜고 끄고 싶으면, 그 세입자 화면에서 “이 세입자 알림”을 바꾸면 돼요. 그 설정이 전체 설정보다 우선해요.' }),
+    ),
+  );
+}
+
+/* ---------- 제외·연결 기억 관리 ---------- */
+export async function renderMatchRules() {
+  const buildingId = await store.getCurrentBuildingId();
+  const rules = await store.getMatchRules(buildingId);
+  const tenants = await store.getTenants(buildingId);
+  const tName = (id) => { const t = tenants.find((x) => x.id === id); return t ? `${t.unit}호 ${t.name}` : '(삭제된 세입자)'; };
+  const refresh = () => navigate('/match-rules', { replace: true });
+
+  const ignores = rules.ignores || [];
+  const aliasKeys = Object.keys(rules.aliases || {});
+
+  const removeIgnore = async (key) => { const r = await store.getMatchRules(buildingId); r.ignores = (r.ignores || []).filter((k) => k !== key); await store.saveMatchRules(buildingId, r); toast('다시 보이게 했어요', 'ok'); refresh(); };
+  const removeAlias = async (key) => { const r = await store.getMatchRules(buildingId); delete r.aliases[key]; await store.saveMatchRules(buildingId, r); toast('연결을 풀었어요', 'ok'); refresh(); };
+
+  return screen({ plain: true },
+    topbar({ title: '제외·연결 다시 보기', back: '/more' }),
+    h('div', { class: 'stack-lg' },
+      banner('info', { text: '은행 파일·문자 정리에서 “제외”했거나 세입자에 자동 연결하도록 기억한 것들이에요. 정상 입금을 실수로 제외했으면 여기서 다시 보이게 할 수 있어요.' }),
+      h('div', {},
+        h('div', { class: 'section-title' }, `제외한 입금자 ${ignores.length}명`),
+        ignores.length === 0
+          ? banner('info', { text: '제외한 입금자가 없어요.' })
+          : h('div', { class: 'stack' }, ...ignores.map((k) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+            h('span', { class: 'chip chip--idle' }, '제외'),
+            h('div', { class: 'rowcard__main' }, h('div', { class: 'rowcard__title' }, k || '(빈 이름)')),
+            h('button', { class: 'btn btn--secondary', onClick: () => removeIgnore(k) }, '다시 보이게')))),
+      ),
+      h('div', {},
+        h('div', { class: 'section-title' }, `이름 → 세입자 연결 기억 ${aliasKeys.length}개`),
+        aliasKeys.length === 0
+          ? banner('info', { text: '기억한 연결이 없어요.' })
+          : h('div', { class: 'stack' }, ...aliasKeys.map((k) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+            h('div', { class: 'rowcard__main' }, h('div', { class: 'rowcard__title' }, `${k || '(빈 이름)'} → ${tName(rules.aliases[k])}`)),
+            h('button', { class: 'btn btn--secondary', onClick: () => removeAlias(k) }, '연결 풀기')))),
+      ),
     ),
   );
 }

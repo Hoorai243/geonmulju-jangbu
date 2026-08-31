@@ -72,13 +72,23 @@ export async function openConfirmForTenant({ tenant, month, depositorName = '', 
                 showConfirm(amt);
               } }, icon('check'), '확인 완료')),
           ]); };
-          const showConfirm = (amt) => { clear(actionArea); append(actionArea, [
-            h('div', { class: 'banner banner--warn' }, icon('alert'),
-              h('div', {}, h('strong', {}, '이대로 저장할까요?'), `${tenant.unit}호 ${tenant.name} · ${formatMonth(month)} · ${won(amt)}원`)),
-            h('div', { class: 'btn-row', style: { marginTop: '8px' } },
-              h('button', { class: 'btn btn--secondary', onClick: showInitial }, '다시 볼게요'),
-              h('button', { class: 'btn btn--primary', onClick: () => doSave(amt) }, icon('check'), '네, 저장')),
-          ]); };
+          const showConfirm = (amt) => {
+            // 실수 방지 경고들(막지는 않고 한 번 더 확인)
+            const warns = [];
+            if (due > 0 && amt >= due * 5) warns.push('청구보다 훨씬 많아요. 0을 하나 더 누르지 않았는지 확인해 주세요.');
+            if (due > 0 && amt > 0 && amt * 5 <= due) warns.push('청구보다 훨씬 적어요. 0을 빠뜨리지 않았는지 확인해 주세요.');
+            if (due > 0 && already >= due) warns.push('이 달은 이미 완납이에요. 또 기록하면 선납(미리 낸 돈)으로 쌓여요.');
+            else if (pays.some((p) => p.amount === amt)) warns.push('이 달에 같은 금액이 이미 기록돼 있어요. 중복이 아닌지 확인해 주세요.');
+            if (date.value && date.value > todayISO()) warns.push('입금일이 아직 오지 않은 날짜예요. 날짜를 확인해 주세요.');
+            clear(actionArea); append(actionArea, [
+              ...warns.map((w) => h('div', { class: 'banner banner--bad' }, icon('alert'), h('div', {}, w))),
+              h('div', { class: 'banner banner--warn' }, icon('alert'),
+                h('div', {}, h('strong', {}, '이대로 저장할까요? '), `${tenant.unit}호 ${tenant.name} · ${formatMonth(month)} · ${won(amt)}원`)),
+              h('div', { class: 'btn-row', style: { marginTop: '8px' } },
+                h('button', { class: 'btn btn--secondary', onClick: showInitial }, '다시 볼게요'),
+                h('button', { class: 'btn btn--primary', onClick: () => doSave(amt) }, icon('check'), '네, 저장')),
+            ]);
+          };
           showInitial();
           return actionArea;
         })(),
