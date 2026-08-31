@@ -1,6 +1,6 @@
 {
   "name": "geonmulju-jangbu",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "건물주 장부 — 월세·관리비·보증금 관리 PWA (정적 파일, 빌드 불필요)",
   "type": "module",
   "private": true,

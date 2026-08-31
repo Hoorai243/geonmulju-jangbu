@@ -1,41 +1,49 @@
-// 알림함 — 지금 챙길 일(미납/계약 만료). 문자 발송은 알림 모듈(스텁)을 통해.
+// 알림함 — 지금 챙길 일(미납/계약 만료/월말 정리/백업). 미납·만료 안내는 폰 문자 앱을 열어 보낸다.
 import { h, won, formatMonth, toast, confirmSheet } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
-import { computeAlerts, sendUnpaid, sendExpiry, getChannel } from '../notify/notify.js';
+import { computeAlerts, openSms, unpaidMessage, expiryMessage } from '../notify/notify.js';
+import { backupNow } from '../export/save-file.js';
 import { navigate } from '../router.js';
 
 export async function renderNotifications() {
   const buildingId = await store.getCurrentBuildingId();
   const alerts = await computeAlerts(buildingId);
-  const channelLabel = getChannel().label;
 
   const sendUnpaidMsg = (a) => {
     if (!a.tenant.phone) return toast('이 세입자의 휴대폰 번호가 없어요. 세입자 수정에서 넣어 주세요.', 'bad');
     confirmSheet({
-      title: '미납 안내 문자 보내기',
-      desc: `${a.tenant.unit}호 ${a.tenant.name}님(${a.tenant.phone})에게 ${won(a.remaining)}원 미납 안내를 보냅니다.`,
-      confirmText: '보내기',
-      onConfirm: async () => { await sendUnpaid(a.tenant, a.month, a.remaining); toast('안내를 보냈어요 (' + channelLabel + ')', 'ok'); },
+      title: '미납 안내 문자',
+      desc: `${a.tenant.unit}호 ${a.tenant.name}님(${a.tenant.phone})에게 보낼 문자 앱을 엽니다. 내용을 확인하고 직접 “전송”을 눌러 주세요.`,
+      confirmText: '문자 앱 열기',
+      onConfirm: () => { if (openSms(a.tenant.phone, unpaidMessage(a.tenant, a.month, a.remaining))) toast('문자 앱을 열었어요. 확인 후 전송하세요.', 'ok'); },
     });
   };
   const sendExpiryMsg = (a) => {
     if (!a.tenant.phone) return toast('이 세입자의 휴대폰 번호가 없어요.', 'bad');
     confirmSheet({
       title: '계약 만료 안내 문자',
-      desc: `${a.tenant.unit}호 ${a.tenant.name}님에게 계약 만료 안내를 보냅니다.`,
-      confirmText: '보내기',
-      onConfirm: async () => { await sendExpiry(a.tenant); toast('안내를 보냈어요 (' + channelLabel + ')', 'ok'); },
+      desc: `${a.tenant.unit}호 ${a.tenant.name}님에게 보낼 문자 앱을 엽니다. 내용을 확인하고 직접 “전송”을 눌러 주세요.`,
+      confirmText: '문자 앱 열기',
+      onConfirm: () => { if (openSms(a.tenant.phone, expiryMessage(a.tenant))) toast('문자 앱을 열었어요. 확인 후 전송하세요.', 'ok'); },
     });
   };
 
   return screen({ plain: true },
     topbar({ title: '알림', sub: '지금 챙길 일', back: '/' }),
     h('div', { class: 'stack-lg' },
-      banner('info', { text: `문자 발송은 지금 “${channelLabel}”로 흉내만 내요. 나중에 실제 문자나 카카오 알림톡으로 바꿀 수 있어요.` }),
 
       alerts.total === 0 && emptyState({ art: 'check', title: '다 챙기셨어요!', desc: '지금은 알림이 없어요.' }),
+
+      alerts.backupReminder && alerts.backupReminder.show && h('div', { class: 'card' },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+          h('span', { class: 'chip chip--bad' }, icon('alert', { size: 16 }), '백업'),
+          h('div', { class: 'rowcard__main' },
+            h('div', { class: 'rowcard__title' }, '기록을 백업할 때예요'),
+            h('div', { class: 'rowcard__meta' }, alerts.backupReminder.never ? '아직 한 번도 백업 안 했어요. 폰이 고장나면 다 사라져요.' : `마지막 백업이 ${alerts.backupReminder.days}일 전이에요.`))),
+        h('button', { class: 'btn btn--primary btn--block mt-4', onClick: async () => { await backupNow(); navigate('/notifications', { replace: true }); } }, icon('download'), '지금 백업하기'),
+      ),
 
       alerts.bankReminder && alerts.bankReminder.show && h('div', { class: 'card' },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },

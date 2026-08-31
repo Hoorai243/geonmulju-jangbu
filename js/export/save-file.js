@@ -1,6 +1,7 @@
 // 파일 저장 — 웹은 브라우저 다운로드, 안드로이드 앱은 파일로 저장 후 "공유(저장/보내기)" 창.
 // WebView 는 <a download> 로 파일이 안 받아지므로 네이티브에선 Filesystem + Share 를 쓴다.
-import { toast } from '../util.js';
+import { toast, monthKey } from '../util.js';
+import * as db from '../db.js';
 
 function cap() { return typeof window !== 'undefined' ? window.Capacitor : undefined; }
 function isNative() { const c = cap(); return !!(c && c.isNativePlatform && c.isNativePlatform()); }
@@ -47,4 +48,13 @@ export async function saveFile(filename, blob) {
     toast('파일 저장에 실패했어요.', 'bad');
     return { ok: false, error: String(e) };
   }
+}
+
+// 전체 백업 파일 저장 + 마지막 백업 날짜 기록
+export async function backupNow() {
+  const data = await db.exportAll();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const r = await saveFile(`건물주장부_백업_${monthKey()}.json`, blob);
+  if (r.ok) await db.metaSet('lastBackupAt', new Date().toISOString());
+  return r;
 }

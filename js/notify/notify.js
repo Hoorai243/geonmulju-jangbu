@@ -33,6 +33,15 @@ export async function sendExpiry(tenant) {
   return getChannel().send({ to: tenant.phone, text: expiryMessage(tenant) });
 }
 
+// 실제 발송 대신 폰의 문자 앱을 미리 쓴 내용과 함께 연다. (사장님이 확인 후 직접 전송)
+// sms: 링크는 안드로이드·아이폰 문자 앱을 열어준다. 요금/전송은 통신사 문자 그대로.
+export function openSms(to, text) {
+  const num = String(to || '').replace(/[^0-9+]/g, '');
+  if (!num) return false;
+  const url = 'sms:' + num + '?body=' + encodeURIComponent(text);
+  try { window.location.href = url; return true; } catch (e) { console.warn('문자 앱 열기 실패', e); return false; }
+}
+
 /* ---------- 지금 챙겨야 할 일(알림함/배지 계산) ---------- */
 export async function computeAlerts(buildingId, today = monthKey()) {
   const tenants = (await store.getTenants(buildingId)).filter((t) => t.status !== 'movedout');
@@ -75,7 +84,19 @@ export async function computeAlerts(buildingId, today = monthKey()) {
     month: today,
   };
 
-  return { unpaid, expiring, bankReminder, total: unpaid.length + expiring.length + (bankReminder.show ? 1 : 0) };
+  // 데이터 안전 — 백업이 오래됐거나 한 번도 안 했으면 챙김(세입자가 있을 때만)
+  const lastBackup = await store.getLastBackupAt();
+  const daysSince = lastBackup ? (Date.now() - new Date(lastBackup).getTime()) / 86400000 : Infinity;
+  const backupReminder = {
+    show: !!defaults.enabled && isCurrentMonth && tenants.length > 0 && daysSince >= 14,
+    never: !lastBackup,
+    days: Number.isFinite(daysSince) ? Math.floor(daysSince) : null,
+  };
+
+  return {
+    unpaid, expiring, bankReminder, backupReminder,
+    total: unpaid.length + expiring.length + (bankReminder.show ? 1 : 0) + (backupReminder.show ? 1 : 0),
+  };
 }
 
 function monthsUntil(fromKey, toKey) {

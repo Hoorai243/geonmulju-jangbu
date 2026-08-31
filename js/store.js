@@ -378,6 +378,9 @@ export async function setNotifyDefaults(v) { await db.metaSet('notifyDefaults', 
 export async function getBankReminderDismissed() { return await db.metaGet('bankReminderDismissed'); }
 export async function dismissBankReminder(month) { await db.metaSet('bankReminderDismissed', month); }
 
+// 마지막 백업 시각(ISO) — 백업 챙김 알림용
+export async function getLastBackupAt() { return await db.metaGet('lastBackupAt'); }
+
 // 세입자별 유효 알림 여부(개별 설정이 전체값을 덮어씀)
 export function effectiveNotify(tenant, defaults) {
   if (tenant.notifyOverride === true) return true;
