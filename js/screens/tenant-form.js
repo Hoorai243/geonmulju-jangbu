@@ -1,5 +1,5 @@
 // 세입자 등록/수정 화면.
-import { h, toast, attachAmountFormat, parseNum, monthKey, confirmSheet } from '../util.js';
+import { h, toast, attachAmountFormat, parseNum, monthKey, confirmSheet, openSheet, formatMonth, parseMonth } from '../util.js';
 import { icon } from '../icons.js';
 import { screen, topbar, banner } from '../ui/shell.js';
 import * as store from '../store.js';
@@ -133,16 +133,45 @@ export async function renderTenantForm({ params }) {
       const saved = await store.saveTenant(data);
       // 기본 요금 동기화(수정 시)
       if (editing && baseFrom) await store.changeRates(saved.id, { from: baseFrom, rent: data.rent, fee: data.fee, feeCycle: data.feeCycle, feeParity: data.feeParity, water: data.water, waterCycle: data.waterCycle, waterParity: data.waterParity });
+      // 새 세입자 + 보증금 있으면: 받은 걸로 기록할지 물어보기(등록만으론 "보관 중"에 안 잡히므로)
+      if (!editing && data.deposit > 0) {
+        toast('세입자를 등록했어요', 'ok');
+        const goDetail = () => navigate('/tenant/' + saved.id, { replace: true });
+        openSheet({
+          title: '이 보증금을 받은 걸로 기록할까요?',
+          desc: `계약 보증금 ${data.deposit.toLocaleString('ko-KR')}원을 “받은 보증금”에도 넣어 둘게요. 그래야 보증금 화면에 “보관 중”으로 보여요. (나중에 고칠 수 있어요)`,
+          body: (close) => h('div', { class: 'btn-row', style: { marginTop: '8px' } },
+            h('button', { class: 'btn btn--secondary', onClick: close }, '아니요, 나중에'),
+            h('button', { class: 'btn btn--primary', onClick: async () => { await store.addLedger({ tenantId: saved.id, type: 'in', amount: data.deposit, date: (data.contractStart || monthKey()) + '-01', memo: '계약 보증금', source: 'manual' }); toast('받은 보증금에 기록했어요', 'ok'); close(); } }, '받은 걸로 기록'),
+          ),
+          onClose: goDetail,
+        });
+        return;
+      }
       toast(editing ? '수정했어요' : '세입자를 등록했어요', 'ok');
       navigate('/tenant/' + saved.id, { replace: true });
     };
     // 같은 호실이 이미 있으면 한 번 더 확인(실수 방지)
-    const others = (await store.getTenants(buildingId)).filter((x) => x.status !== 'movedout' && x.id !== t?.id);
-    if (others.some((x) => (x.unit || '').trim() === unit.value.trim())) {
-      confirmSheet({ title: '같은 호실이 이미 있어요', desc: `${unit.value.trim()}호로 등록된 세입자가 이미 있어요. 그래도 저장할까요?`, confirmText: '그대로 저장', onConfirm: doSave });
+    const proceed = async () => {
+      const others = (await store.getTenants(buildingId)).filter((x) => x.status !== 'movedout' && x.id !== t?.id);
+      if (others.some((x) => (x.unit || '').trim() === unit.value.trim())) {
+        confirmSheet({ title: '같은 호실이 이미 있어요', desc: `${unit.value.trim()}호로 등록된 세입자가 이미 있어요. 그래도 저장할까요?`, confirmText: '그대로 저장', onConfirm: doSave });
+        return;
+      }
+      await doSave();
+    };
+    // 계약 시작월이 여러 달 과거면 경고(막지 않음) — 그 사이가 전부 미납으로 잡혀 "밀림"이 크게 뜸
+    const startM = data.contractStart;
+    const monthsPast = startM ? ((parseMonth(monthKey()).y - parseMonth(startM).y) * 12 + (parseMonth(monthKey()).m - parseMonth(startM).m)) : 0;
+    if (monthsPast >= 3) {
+      confirmSheet({
+        title: '계약 시작월이 좀 예전이에요',
+        desc: `${formatMonth(startM)}부터로 하면 그 사이 ${monthsPast}달이 아직 안 낸 걸로 잡혀서 “밀림”이 크게 표시돼요. 보통은 장부 정리를 시작하는 달을 넣는 게 좋아요. 그래도 이 달로 저장할까요?`,
+        confirmText: '그대로 저장', onConfirm: proceed,
+      });
       return;
     }
-    await doSave();
+    await proceed();
   };
 
   return screen({ plain: true },
