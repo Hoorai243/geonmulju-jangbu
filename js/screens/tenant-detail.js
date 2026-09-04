@@ -95,7 +95,9 @@ export async function renderTenantDetail({ params }) {
         },
           h('div', { class: 'dot dot--' + statusCls(x.s), style: { width: '20px', height: '20px', margin: '0 auto 6px' } }),
           h('div', { class: 'muted', style: { fontSize: '0.8rem' } }, formatMonth(x.m).replace(/^\d+년 /, ''))))),
-        h('button', { class: 'btn btn--secondary btn--block mt-4', onClick: () => navigate('/tenant/' + t.id + '/payments') }, icon('history'), '전체 입금 내역 (기간별로 보기·수정)'),
+        h('div', { class: 'btn-row mt-4' },
+          h('button', { class: 'btn btn--secondary', onClick: () => navigate('/tenant/' + t.id + '/summary') }, icon('receipt'), '납부 요약 (전체 정산)'),
+          h('button', { class: 'btn btn--secondary', onClick: () => navigate('/tenant/' + t.id + '/payments') }, icon('history'), '전체 입금 내역')),
       ),
 
       // 요금 변경
@@ -328,6 +330,57 @@ function confirmDelete(t) {
     desc: '정말 삭제할까요? 모든 기록이 지워지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.',
     confirmText: '삭제', onConfirm: async () => { await store.deleteTenant(t.id); toast('삭제했어요'); navigate('/tenants', { replace: true }); },
   });
+}
+
+// 납부 요약(전체 정산) — 계약/장부 시작부터 지금까지 달마다 청구·받음·누적(밀림/선납)과 총 차액.
+export async function renderTenantSummary({ params }) {
+  const t = await store.getTenant(params.id);
+  if (!t) { navigate('/tenants', { replace: true }); return h('div'); }
+  const upto = (t.status === 'movedout' && t.movedOutAt) ? monthKey(new Date(t.movedOutAt)) : monthKey();
+  const { map } = await store.tenantLedger(t, upto);
+  const months = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
+  let totalDue = 0, totalPaid = 0, lateCount = 0, running = 0;
+  const rows = months.map((m) => {
+    const s = map.get(m);
+    totalDue += s.due; totalPaid += s.paid;
+    if (s.due > 0 && s.state !== 'ok') lateCount++;
+    running += s.paid - s.due;
+    return { m, s, running };
+  });
+  const diff = totalPaid - totalDue;
+  const signWon = (n) => (n < 0 ? '-' : n > 0 ? '+' : '') + won(Math.abs(n)) + '원';
+  const bigResult = diff < 0
+    ? h('strong', { class: 'amount won amount--big', style: { color: 'var(--bad-ink)' } }, '밀린 돈 ' + won(-diff) + '원')
+    : diff > 0
+      ? h('strong', { class: 'amount won amount--big', style: { color: 'var(--primary)' } }, '미리 낸 돈 ' + won(diff) + '원')
+      : h('strong', { class: 'amount won amount--big', style: { color: 'var(--ok-ink)' } }, '딱 맞아요');
+
+  return screen({ plain: true },
+    topbar({ title: '납부 요약', sub: `${unitLabel(t.unit)} ${t.name}`, back: '/tenant/' + t.id }),
+    h('div', { class: 'stack-lg' },
+      h('div', { class: 'card' },
+        h('dl', { class: 'deflist' },
+          dt('지금까지 청구'), dd(won(totalDue) + '원'),
+          dt('지금까지 받음'), dd(won(totalPaid) + '원'),
+          dt('완납 못한 달'), dd(lateCount + '번')),
+        h('hr', { class: 'hr' }),
+        h('div', { style: { textAlign: 'center', padding: '4px 0' } }, bigResult)),
+      rows.length === 0
+        ? banner('info', { text: '아직 셈할 내역이 없어요.' })
+        : h('div', { class: 'card', style: { overflowX: 'auto' } },
+          h('table', { class: 'table', style: { fontSize: 'var(--fs-sm)' } },
+            h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '누적'))),
+            h('tbody', {}, ...rows.map(({ m, s, running }) => h('tr', {},
+              h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '10px', height: '10px', marginRight: '6px', verticalAlign: 'middle' } }), m),
+              h('td', { class: 'num' }, s.due ? won(s.due) : '-'),
+              h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? won(s.paid) : '-'),
+              h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, signWon(running))))),
+            h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
+              h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num' }, signWon(diff)))))),
+      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“누적”은 그 달까지 합쳐서 밀렸는지(−) 미리 냈는지(+)를 보여줘요. 왼쪽 점: 초록=완납, 노랑=부분, 빨강=미납, 회색=미확인. 여러 달치를 한 번에 낸 달은 “받음”이 파랗게 크게 나와요.'),
+      h('div', { style: { height: '12px' } }),
+    ),
+  );
 }
 
 // 기간 쿼리 문자열 만들기
