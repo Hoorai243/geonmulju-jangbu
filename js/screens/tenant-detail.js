@@ -95,6 +95,7 @@ export async function renderTenantDetail({ params }) {
         },
           h('div', { class: 'dot dot--' + statusCls(x.s), style: { width: '20px', height: '20px', margin: '0 auto 6px' } }),
           h('div', { class: 'muted', style: { fontSize: '0.8rem' } }, formatMonth(x.m).replace(/^\d+년 /, ''))))),
+        h('button', { class: 'btn btn--secondary btn--block mt-4', onClick: () => navigate('/tenant/' + t.id + '/payments') }, icon('history'), '전체 입금 내역 (기간별로 보기·수정)'),
       ),
 
       // 요금 변경
@@ -326,4 +327,75 @@ function confirmDelete(t) {
     desc: '정말 삭제할까요? 모든 기록이 지워지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.',
     confirmText: '삭제', onConfirm: async () => { await store.deleteTenant(t.id); toast('삭제했어요'); navigate('/tenants', { replace: true }); },
   });
+}
+
+// 기간 쿼리 문자열 만들기
+function qstr(from, to) {
+  const p = new URLSearchParams();
+  if (from) p.set('from', from);
+  if (to) p.set('to', to);
+  const s = p.toString();
+  return s ? '?' + s : '';
+}
+
+// 전체 입금 내역(기간 필터) — 6개월 제한 없이 다 보고, 각 입금을 되돌리기/보증금으로 옮기기.
+export async function renderTenantPayments({ params, query }) {
+  const t = await store.getTenant(params.id);
+  if (!t) { navigate('/tenants', { replace: true }); return h('div'); }
+  const all = await store.getAllPaymentsForTenant(t.id);
+  const from = query.from || '';
+  const to = query.to || '';
+  const inRange = (p) => (!from || p.month >= from) && (!to || p.month <= to);
+  const list = all.filter(inRange).sort((a, b) => (a.month !== b.month ? (a.month < b.month ? 1 : -1) : ((a.paidAt || '') < (b.paidAt || '') ? 1 : -1)));
+  const sum = list.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const refresh = () => navigate('/tenant/' + t.id + '/payments' + qstr(from, to), { replace: true });
+
+  const fromInput = h('input', { class: 'input', type: 'month', value: from });
+  const toInput = h('input', { class: 'input', type: 'month', value: to });
+  const apply = () => navigate('/tenant/' + t.id + '/payments' + qstr(fromInput.value, toInput.value));
+  fromInput.onchange = apply; toInput.onchange = apply;
+
+  const removePay = (p) => confirmSheet({
+    title: '이 입금을 되돌릴까요?',
+    desc: `${formatMonth(p.month)}치 · ${won(p.amount)}원을 지워요.` + (p.source === 'bank' ? ' 은행에서 확인된 입금이에요.' : ''),
+    confirmText: '되돌리기', danger: true,
+    onConfirm: async () => { await store.deletePayment(p.id); toast('되돌렸어요', 'ok'); refresh(); },
+  });
+  const toDeposit = (p) => confirmSheet({
+    title: '이 입금을 보증금으로 옮길까요?',
+    desc: `${formatMonth(p.month)}치 · ${won(p.amount)}원을 월세에서 빼고 “받은 보증금”으로 옮겨요. (보증금 화면에서 확인·되돌리기 가능)`,
+    confirmText: '보증금으로 옮기기',
+    onConfirm: async () => {
+      await store.addLedger({ tenantId: t.id, type: 'in', amount: p.amount, date: p.paidAt || (p.month + '-01'), memo: '월세에서 옮김' + (p.depositorName ? ' · ' + p.depositorName : ''), accountId: p.accountId || null, source: p.source || 'manual' });
+      await store.deletePayment(p.id);
+      toast('보증금으로 옮겼어요', 'ok'); refresh();
+    },
+  });
+
+  const payCard = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+    h('div', { class: 'grow' },
+      h('div', { style: { fontWeight: 800 } }, `${won(p.amount)}원`),
+      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${formatMonth(p.month)}치 · ${p.depositorName || '입금'} · ${p.source === 'bank' ? '은행 확인' : '직접 입력'}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`)),
+    h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', padding: '0 10px', fontSize: 'var(--fs-sm)', flex: 'none' }, onClick: () => toDeposit(p) }, icon('wallet', { size: 16 }), '보증금으로'),
+    h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: () => removePay(p) }, icon('trash')),
+  );
+
+  return screen({ plain: true },
+    topbar({ title: '전체 입금 내역', sub: `${unitLabel(t.unit)} ${t.name}`, back: '/tenant/' + t.id }),
+    h('div', { class: 'stack-lg' },
+      h('div', { class: 'card stack' },
+        h('div', { style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' } },
+          h('div', { class: 'field', style: { margin: 0, flex: 1, minWidth: '120px' } }, h('label', { class: 'label' }, '시작월'), fromInput),
+          h('div', { class: 'field', style: { margin: 0, flex: 1, minWidth: '120px' } }, h('label', { class: 'label' }, '끝월'), toInput)),
+        (from || to) ? h('button', { class: 'btn btn--ghost', onClick: () => navigate('/tenant/' + t.id + '/payments') }, '전체 기간 보기') : null,
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, (from || to) ? `${from ? formatMonth(from) : '처음'} ~ ${to ? formatMonth(to) : '지금'}만 보는 중` : '전체 기간'),
+      ),
+      h('div', { class: 'card', style: { background: 'var(--surface-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+        h('strong', {}, `${list.length}건`), h('strong', { class: 'amount won' }, won(sum) + '원')),
+      list.length
+        ? h('div', { class: 'stack' }, ...list.map(payCard))
+        : banner('info', { text: '이 기간에 입금 기록이 없어요.' }),
+      h('div', { style: { height: '12px' } }),
+    ),
+  );
 }

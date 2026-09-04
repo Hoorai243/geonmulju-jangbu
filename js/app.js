@@ -11,7 +11,7 @@ import { renderLogin } from './screens/login.js';
 import { renderDashboard } from './screens/dashboard.js';
 import { renderTenants } from './screens/tenants.js';
 import { renderTenantForm } from './screens/tenant-form.js';
-import { renderTenantDetail } from './screens/tenant-detail.js';
+import { renderTenantDetail, renderTenantPayments } from './screens/tenant-detail.js';
 import { renderDepositList, renderDepositDetail } from './screens/deposit.js';
 import { renderHistory } from './screens/history.js';
 import { renderNotifications } from './screens/notifications.js';
@@ -60,6 +60,7 @@ async function boot() {
   route('/tenant/new', renderTenantForm);
   route('/tenant/:id', renderTenantDetail);
   route('/tenant/:id/edit', renderTenantForm);
+  route('/tenant/:id/payments', renderTenantPayments);
   route('/quick-pay', renderQuickPay); // ⚠️ 임시 수기 도우미(자동연동 시 제거 후보)
   route('/bank-import', renderBankImport);
   route('/bank-guide', renderBankGuide);
