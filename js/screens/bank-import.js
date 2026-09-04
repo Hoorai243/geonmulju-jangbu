@@ -121,7 +121,11 @@ export async function renderBankImport() {
         const rules2 = await store.getMatchRules(buildingId);
         for (const g of groups) {
           if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
-          else if (g.decision) rules2.aliases[g.key] = g.decision; // 다음에도 기억
+          else if (g.decision) {
+            // "다음에도 자동 연결"이 켜져 있을 때만 이름을 기억. 끄면(이번만) 기존 기억도 지움.
+            if (g.remember === false) delete rules2.aliases[g.key];
+            else rules2.aliases[g.key] = g.decision;
+          }
         }
         let saved = 0, replaced = 0;
         for (const p of plan) {
@@ -161,7 +165,12 @@ export async function renderBankImport() {
         h('option', { value: '', selected: g.decision === '' }, onlyDup ? '이미 있음 (모두)' : '건너뛰기 (이번만)'),
         h('option', { value: 'ignore', selected: g.decision === 'ignore' }, '제외 (앞으로 계속)'),
         ...tenants.map((tn) => h('option', { value: tn.id, selected: g.decision === tn.id }, `${unitLabel(tn.unit)} ${tn.name}`)));
-      sel.onchange = () => { g.decision = sel.value; updateSave(); };
+      const isTenantChosen = () => g.decision && g.decision !== 'ignore';
+      // 이 입금자 이름을 다음에도 자동 연결할지(기본 켬). 끄면 이번만 — "월세"처럼 뻔한 이름이 다른 사람에게 잘못 붙는 걸 막음.
+      const rememberCb = h('input', { type: 'checkbox', checked: g.remember !== false });
+      rememberCb.onchange = () => { g.remember = rememberCb.checked; };
+      const rememberRow = onlyDup ? null : h('label', { style: { display: isTenantChosen() ? 'flex' : 'none', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, rememberCb, '이 이름을 다음에도 자동 연결 (끄면 이번만)');
+      sel.onchange = () => { g.decision = sel.value; if (rememberRow) rememberRow.style.display = isTenantChosen() ? 'flex' : 'none'; updateSave(); };
       const depCb = h('input', { type: 'checkbox', checked: !!g.asDeposit });
       depCb.onchange = () => { g.asDeposit = depCb.checked; };
       const depRow = onlyDup ? null : h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, depCb, '이 입금은 월세가 아니라 보증금이에요');
@@ -175,6 +184,7 @@ export async function renderBankImport() {
         h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', margin: '2px 0 10px' } },
           `${g.live.length + g.dup.length}건 · 합계 ${won(g.sum)}원` + (g.dup.length ? ` (이미 ${g.dup.length}건 저장됨)` : '')),
         sel,
+        rememberRow,
         depRow,
       );
     };
@@ -183,7 +193,7 @@ export async function renderBankImport() {
     append(result, [
       h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
         h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, `입금 ${txns.length}건 · 입금자 ${groups.length}명`),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, '같은 이름은 한 번만 정하면 그 이름 전부에 적용돼요. 한 번 정한 이름은 다음에도 자동으로 기억해요.'),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, '같은 이름은 한 번만 정하면 그 이름 전부에 적용돼요. 한 번 정한 이름은 다음에도 자동으로 기억해요. “월세”처럼 뻔한 이름은 “다음에도 자동 연결”을 꺼서 이번만 처리하세요.'),
         accounts.length > 0 && (() => {
           const sel = h('select', { class: 'select', style: { marginTop: '10px' } },
             h('option', { value: '' }, '계좌 선택 안 함'),
@@ -192,7 +202,7 @@ export async function renderBankImport() {
           return h('div', { style: { marginTop: '4px' } }, h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '4px' } }, '이 파일은 어느 계좌예요? (여러 계좌 쓸 때 구분용)'), sel);
         })(),
       ),
-      banner('info', { text: '“확인 필요”만 골라주면 돼요. 세입자 이름과 달라도 이 세입자로 지정하면 다음부터 자동 연결돼요. 필요 없는 입금은 “제외”.' }),
+      banner('info', { text: '“확인 필요”만 골라주면 돼요. 세입자 이름과 달라도 이 세입자로 지정하면 다음부터 자동 연결돼요. 뻔한 이름(예: “월세”)은 “다음에도 자동 연결”을 꺼서 이번만. 필요 없는 입금은 “제외”.' }),
       dupTotal > 0 && h('div', { class: 'muted center', style: { fontSize: 'var(--fs-sm)' } }, `이미 저장된 ${dupTotal}건은 자동으로 건너뛰어요.`),
       h('div', { class: 'stack', style: { marginTop: '12px' } }, ...groups.map((g, i) => groupEl(g, i === 0))),
       h('div', { style: { position: 'sticky', bottom: '0', padding: '12px 0', background: 'linear-gradient(transparent, var(--paper) 30%)' } }, saveBtn),
