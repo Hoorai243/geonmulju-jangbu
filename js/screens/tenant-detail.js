@@ -200,7 +200,8 @@ function openRateChange(t, refresh) {
   // 이미 수도세가 켜진 세입자라면 끌 수 있게 계속 보여줌.
   const showWater = wc.cycle !== 'none';
   const rent = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.rent ? cur.rent.toLocaleString('ko-KR') : '' }));
-  const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: cur.fee ? cur.fee.toLocaleString('ko-KR') : '' }));
+  const curFee = store.feeConfig(t, monthKey()).amount; // 설정된 원래 관리비(격월 '안 받는 달'이면 ratesForMonth().fee 는 0이라 못 씀)
+  const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', value: curFee ? curFee.toLocaleString('ko-KR') : '' }));
 
   // 관리비 주기
   const feeC = store.feeConfig(t, monthKey());

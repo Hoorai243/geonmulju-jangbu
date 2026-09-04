@@ -11,6 +11,8 @@ export async function renderTenantForm({ params }) {
   const buildingId = t ? t.buildingId : await store.getCurrentBuildingId();
   const baseRate = t ? store.ratesForMonth(t, t.rentHistory?.[0]?.from || t.contractStart) : { rent: 0, fee: 0 };
   const baseFrom = t ? (t.rentHistory?.[0]?.from || t.contractStart) : null;
+  // 관리비는 설정된 원래 금액을 보여준다. ratesForMonth().fee 는 격월 '안 받는 달'이면 0이 나와서 0으로 보이는 버그가 있었음.
+  const baseFee = t ? store.feeConfig(t, baseFrom).amount : 0;
 
   // 입력 요소
   const unit = h('input', { class: 'input', placeholder: '예: 101, 201 · 또는 상호(부동산, 미용실)', value: t?.unit || '', inputmode: 'text' });
@@ -35,7 +37,7 @@ export async function renderTenantForm({ params }) {
   const phone = h('input', { class: 'input', type: 'tel', placeholder: '010-0000-0000 (선택)', value: t?.phone || '', inputmode: 'numeric' });
 
   const rent = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', placeholder: '0', value: baseRate.rent ? baseRate.rent.toLocaleString('ko-KR') : '' }));
-  const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', placeholder: '0', value: baseRate.fee ? baseRate.fee.toLocaleString('ko-KR') : '' }));
+  const fee = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', placeholder: '0', value: baseFee ? baseFee.toLocaleString('ko-KR') : '' }));
   const deposit = attachAmountFormat(h('input', { class: 'input input--amount', inputmode: 'numeric', placeholder: '0', value: t?.deposit ? t.deposit.toLocaleString('ko-KR') : '' }));
 
   const contractStart = h('input', { class: 'input', type: 'month', value: t?.contractStart || monthKey() });
