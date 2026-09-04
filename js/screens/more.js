@@ -60,7 +60,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.44.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.45.0'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -102,8 +102,17 @@ function restore() {
     let parsed;
     try { parsed = JSON.parse(await file.text()); } catch { return toast('백업 파일을 읽을 수 없어요.', 'bad'); }
     const doImport = (data) => requireAuth({
-      title: '백업 불러오기', desc: '지금 저장된 내용이 백업 파일 내용으로 덮어써지고 되돌릴 수 없어요. 지문이나 비밀번호로 확인해 주세요.', confirmText: '불러오기',
-      onConfirm: async () => { await db.importAll(data); toast('불러왔어요', 'ok'); navigate('/', { replace: true }); },
+      title: '백업 불러오기', desc: '지금 저장된 세입자·입금·보증금 내용이 백업 파일 내용으로 덮어써지고 되돌릴 수 없어요. (이 기기의 비밀번호·지문은 그대로 유지돼요) 지문이나 비밀번호로 확인해 주세요.', confirmText: '불러오기',
+      onConfirm: async () => {
+        // 비밀번호·지문은 "이 기기 것"을 유지한다(백업이 덮어쓰지 않게). 나머지 자료·설정만 들어옴.
+        const KEEP = ['auth', 'biometric-native', 'webauthn'];
+        const keep = {};
+        for (const k of KEEP) { const v = await db.get('meta', k); if (v) keep[k] = v; }
+        const clean = { ...data, meta: Array.isArray(data.meta) ? data.meta.filter((m) => !KEEP.includes(m.key)) : data.meta };
+        await db.importAll(clean);
+        for (const k of Object.keys(keep)) await db.put('meta', keep[k]);
+        toast('불러왔어요', 'ok'); navigate('/', { replace: true });
+      },
     });
     if (auth.isEncryptedBackup(parsed)) {
       promptBackupPassword(async (p) => {
