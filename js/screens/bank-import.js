@@ -173,7 +173,7 @@ export async function renderBankImport() {
       sel.onchange = () => { g.decision = sel.value; if (rememberRow) rememberRow.style.display = isTenantChosen() ? 'flex' : 'none'; updateSave(); };
       const depCb = h('input', { type: 'checkbox', checked: !!g.asDeposit });
       depCb.onchange = () => { g.asDeposit = depCb.checked; };
-      const depRow = onlyDup ? null : h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, depCb, '이 입금은 월세가 아니라 보증금이에요');
+      const depRow = onlyDup ? null : h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, depCb, '이 입금은 월세·관리비가 아니라 보증금이에요');
       const badge = onlyDup ? h('span', { class: 'chip chip--idle' }, '이미 있음')
         : g.decision && g.decision !== 'ignore' ? h('span', { class: 'chip chip--ok' }, '연결됨')
           : g.decision === 'ignore' ? h('span', { class: 'chip chip--idle' }, '제외')
