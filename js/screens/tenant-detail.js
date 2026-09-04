@@ -171,10 +171,22 @@ async function openMonthSheet(t, m, refresh) {
           onConfirm: doDel,
         });
       };
-      const payRow = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+      // 월세로 잘못 저장한 입금을 보증금으로 옮기기(월세 기록 삭제 + 보증금 '입금'으로 추가)
+      const toDeposit = (p) => confirmSheet({
+        title: '이 입금을 보증금으로 옮길까요?',
+        desc: `${won(p.amount)}원을 이 달 월세에서 빼고 “받은 보증금”으로 옮겨요. 이 달 상태가 바뀔 수 있어요. (보증금 화면에서 확인/되돌리기 가능)`,
+        confirmText: '보증금으로 옮기기',
+        onConfirm: async () => {
+          await store.addLedger({ tenantId: t.id, type: 'in', amount: p.amount, date: p.paidAt || (m + '-01'), memo: '월세에서 옮김' + (p.depositorName ? ' · ' + p.depositorName : ''), accountId: p.accountId || null, source: p.source || 'manual' });
+          await store.deletePayment(p.id);
+          toast('보증금으로 옮겼어요', 'ok'); close(); refresh();
+        },
+      });
+      const payRow = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '10px' } },
         h('div', { class: 'grow' },
           h('div', { style: { fontWeight: 800 } }, won(p.amount) + '원'),
           h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${p.depositorName || '입금'} · ${p.source === 'bank' ? '은행 확인' : '직접 입력'}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`)),
+        h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', padding: '0 10px', fontSize: 'var(--fs-sm)', flex: 'none' }, onClick: () => toDeposit(p) }, icon('wallet', { size: 16 }), '보증금으로'),
         h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: () => removePay(p) }, icon('trash')),
       );
       return h('div', { class: 'stack' },
