@@ -174,6 +174,19 @@ export async function renderBankImport() {
       const depCb = h('input', { type: 'checkbox', checked: !!g.asDeposit });
       depCb.onchange = () => { g.asDeposit = depCb.checked; };
       const depRow = onlyDup ? null : h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, depCb, '이 입금은 월세·관리비가 아니라 보증금이에요');
+      // 자세히 보기: 이 입금자의 입금들을 날짜·금액 표로(여러 건이면 각각). 이미 저장된 건은 흐리게 표시.
+      const hasDup = g.dup.length > 0;
+      const allTx = [...g.live.map((x) => ({ t: x, dup: false })), ...g.dup.map((x) => ({ t: x, dup: true }))].sort((a, b) => (a.t.date < b.t.date ? -1 : 1));
+      const details = h('div', { style: { display: 'none', marginTop: '8px', overflowX: 'auto' } },
+        h('table', { class: 'table', style: { fontSize: 'var(--fs-sm)' } },
+          h('thead', {}, h('tr', {}, h('th', {}, '입금일'), h('th', { class: 'num' }, '금액'), hasDup ? h('th', {}, '') : null)),
+          h('tbody', {}, ...allTx.map(({ t, dup }) => h('tr', dup ? { style: { opacity: '.5' } } : {},
+            h('td', {}, t.date),
+            h('td', { class: 'num' }, won(t.amount) + '원'),
+            hasDup ? h('td', { style: { fontSize: '0.85em', color: 'var(--ink-3)' } }, dup ? '이미 있음' : '') : null)))));
+      const detailBtn = h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', fontSize: 'var(--fs-sm)', marginTop: '6px' } }, `자세히 보기 (${allTx.length}건) ▾`);
+      let detailOpen = false;
+      detailBtn.onclick = () => { detailOpen = !detailOpen; details.style.display = detailOpen ? 'block' : 'none'; detailBtn.textContent = detailOpen ? '접기 ▴' : `자세히 보기 (${allTx.length}건) ▾`; };
       const badge = onlyDup ? h('span', { class: 'chip chip--idle' }, '이미 있음')
         : g.decision && g.decision !== 'ignore' ? h('span', { class: 'chip chip--ok' }, '연결됨')
           : g.decision === 'ignore' ? h('span', { class: 'chip chip--idle' }, '제외')
@@ -181,8 +194,11 @@ export async function renderBankImport() {
       return h('div', { class: 'card', style: onlyDup ? { opacity: '.6' } : {} },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' } },
           h('div', { style: { fontWeight: 700 } }, g.display), badge),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', margin: '2px 0 10px' } },
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', margin: '2px 0 6px' } },
           `${g.live.length + g.dup.length}건 · 합계 ${won(g.sum)}원` + (g.dup.length ? ` (이미 ${g.dup.length}건 저장됨)` : '')),
+        detailBtn,
+        details,
+        h('div', { style: { height: '8px' } }),
         sel,
         rememberRow,
         depRow,
