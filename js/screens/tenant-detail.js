@@ -164,13 +164,11 @@ async function openMonthSheet(t, m, refresh) {
         const newPaid = Math.max(0, (st.paid || 0) - p.amount);
         const newState = due > 0 && newPaid >= due ? 'ok' : newPaid > 0 ? 'part' : (store.isOverdue(t, m) ? 'bad' : 'idle');
         const label = { ok: '완납', part: '부분납부', bad: '미납', idle: '미확인' }[newState];
+        const desc = `${won(p.amount)}원을 지우면 ${formatMonth(m)}이 "${label}"(으)로 바뀌어요.`;
         const doDel = async () => { await store.deletePayment(p.id); toast('되돌렸어요', 'ok'); close(); refresh(); };
-        confirmSheet({
-          title: '이 입금을 되돌릴까요?',
-          desc: `${won(p.amount)}원을 지우면 ${formatMonth(m)}이 "${label}"(으)로 바뀌어요.` + (p.source === 'bank' ? ' 은행에서 확인된 입금이에요.' : ''),
-          confirmText: '되돌리기',
-          onConfirm: doDel,
-        });
+        // 은행에서 확인된 입금은 되돌릴 때 지문·비밀번호로 한 번 더 확인
+        if (p.source === 'bank') requireAuth({ title: '은행 확인 입금을 되돌릴까요?', desc: desc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '되돌리기', onConfirm: doDel });
+        else confirmSheet({ title: '이 입금을 되돌릴까요?', desc, confirmText: '되돌리기', onConfirm: doDel });
       };
       // 월세로 잘못 저장한 입금을 보증금으로 옮기기(월세 기록 삭제 + 보증금 '입금'으로 추가)
       const toDeposit = (p) => confirmSheet({
@@ -183,12 +181,15 @@ async function openMonthSheet(t, m, refresh) {
           toast('보증금으로 옮겼어요', 'ok'); close(); refresh();
         },
       });
-      const payRow = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-        h('div', { class: 'grow' },
-          h('div', { style: { fontWeight: 800 } }, won(p.amount) + '원'),
-          h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${p.depositorName || '입금'} · ${p.source === 'bank' ? '은행 확인' : '직접 입력'}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`)),
-        h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', padding: '0 10px', fontSize: 'var(--fs-sm)', flex: 'none' }, onClick: () => toDeposit(p) }, icon('wallet', { size: 16 }), '보증금으로'),
-        h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: () => removePay(p) }, icon('trash')),
+      const payRow = (p) => h('div', { class: 'card' },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } },
+          h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)' } }, won(p.amount) + '원'),
+          h('span', { class: 'chip ' + (p.source === 'bank' ? 'chip--info' : 'chip--idle'), style: { flex: 'none' } }, p.source === 'bank' ? '은행 확인' : '직접 입력')),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
+          `${p.depositorName || '입금'}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`),
+        h('div', { class: 'btn-row', style: { marginTop: '12px' } },
+          h('button', { class: 'btn btn--secondary', onClick: () => toDeposit(p) }, icon('wallet', { size: 18 }), '보증금으로'),
+          h('button', { class: 'btn btn--secondary', onClick: () => removePay(p) }, icon('trash', { size: 18 }), '되돌리기')),
       );
       return h('div', { class: 'stack' },
         h('div', { class: 'card', style: { background: 'var(--surface-2)' } },
@@ -355,12 +356,13 @@ export async function renderTenantPayments({ params, query }) {
   const apply = () => navigate('/tenant/' + t.id + '/payments' + qstr(fromInput.value, toInput.value));
   fromInput.onchange = apply; toInput.onchange = apply;
 
-  const removePay = (p) => confirmSheet({
-    title: '이 입금을 되돌릴까요?',
-    desc: `${formatMonth(p.month)}치 · ${won(p.amount)}원을 지워요.` + (p.source === 'bank' ? ' 은행에서 확인된 입금이에요.' : ''),
-    confirmText: '되돌리기', danger: true,
-    onConfirm: async () => { await store.deletePayment(p.id); toast('되돌렸어요', 'ok'); refresh(); },
-  });
+  const removePay = (p) => {
+    const desc = `${formatMonth(p.month)}치 · ${won(p.amount)}원을 지워요.`;
+    const onConfirm = async () => { await store.deletePayment(p.id); toast('되돌렸어요', 'ok'); refresh(); };
+    // 은행에서 확인된 입금은 되돌릴 때 지문·비밀번호로 한 번 더 확인
+    if (p.source === 'bank') requireAuth({ title: '은행 확인 입금을 되돌릴까요?', desc: desc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '되돌리기', onConfirm });
+    else confirmSheet({ title: '이 입금을 되돌릴까요?', desc, confirmText: '되돌리기', danger: true, onConfirm });
+  };
   const toDeposit = (p) => confirmSheet({
     title: '이 입금을 보증금으로 옮길까요?',
     desc: `${formatMonth(p.month)}치 · ${won(p.amount)}원을 월세에서 빼고 “받은 보증금”으로 옮겨요. (보증금 화면에서 확인·되돌리기 가능)`,
@@ -372,12 +374,15 @@ export async function renderTenantPayments({ params, query }) {
     },
   });
 
-  const payCard = (p) => h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-    h('div', { class: 'grow' },
-      h('div', { style: { fontWeight: 800 } }, `${won(p.amount)}원`),
-      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, `${formatMonth(p.month)}치 · ${p.depositorName || '입금'} · ${p.source === 'bank' ? '은행 확인' : '직접 입력'}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`)),
-    h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', padding: '0 10px', fontSize: 'var(--fs-sm)', flex: 'none' }, onClick: () => toDeposit(p) }, icon('wallet', { size: 16 }), '보증금으로'),
-    h('button', { class: 'iconbtn', 'aria-label': '되돌리기', onClick: () => removePay(p) }, icon('trash')),
+  const payCard = (p) => h('div', { class: 'card' },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } },
+      h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)' } }, `${won(p.amount)}원`),
+      h('span', { class: 'chip ' + (p.source === 'bank' ? 'chip--info' : 'chip--idle'), style: { flex: 'none' } }, p.source === 'bank' ? '은행 확인' : '직접 입력')),
+    h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
+      `${formatMonth(p.month)}치${p.depositorName ? ' · ' + p.depositorName : ''}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`),
+    h('div', { class: 'btn-row', style: { marginTop: '12px' } },
+      h('button', { class: 'btn btn--secondary', onClick: () => toDeposit(p) }, icon('wallet', { size: 18 }), '보증금으로'),
+      h('button', { class: 'btn btn--secondary', onClick: () => removePay(p) }, icon('trash', { size: 18 }), '되돌리기')),
   );
 
   return screen({ plain: true },
