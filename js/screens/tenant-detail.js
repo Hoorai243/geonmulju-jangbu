@@ -173,16 +173,17 @@ async function openMonthSheet(t, m, refresh) {
         else confirmSheet({ title: '이 입금을 되돌릴까요?', desc, confirmText: '되돌리기', onConfirm: doDel });
       };
       // 월세로 잘못 저장한 입금을 보증금으로 옮기기(월세 기록 삭제 + 보증금 '입금'으로 추가)
-      const toDeposit = (p) => confirmSheet({
-        title: '이 입금을 보증금으로 옮길까요?',
-        desc: `${won(p.amount)}원을 이 달 월세에서 빼고 “받은 보증금”으로 옮겨요. 이 달 상태가 바뀔 수 있어요. (보증금 화면에서 확인/되돌리기 가능)`,
-        confirmText: '보증금으로 옮기기',
-        onConfirm: async () => {
+      const toDeposit = (p) => {
+        const desc = `${won(p.amount)}원을 이 달 월세에서 빼고 “받은 보증금”으로 옮겨요. 이 달 상태가 바뀔 수 있어요. (보증금 화면에서 확인/되돌리기 가능)`;
+        const onConfirm = async () => {
           await store.addLedger({ tenantId: t.id, type: 'in', amount: p.amount, date: p.paidAt || (m + '-01'), memo: '월세에서 옮김' + (p.depositorName ? ' · ' + p.depositorName : ''), accountId: p.accountId || null, source: p.source || 'manual' });
           await store.deletePayment(p.id);
           toast('보증금으로 옮겼어요', 'ok'); close(); refresh();
-        },
-      });
+        };
+        // 은행에서 확인된 입금을 옮기면 은행 기록이 지워지므로 지문·비밀번호로 확인
+        if (p.source === 'bank') requireAuth({ title: '은행 확인 입금을 보증금으로 옮길까요?', desc: desc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '보증금으로 옮기기', onConfirm });
+        else confirmSheet({ title: '이 입금을 보증금으로 옮길까요?', desc, confirmText: '보증금으로 옮기기', onConfirm });
+      };
       const payRow = (p) => h('div', { class: 'card' },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } },
           h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)' } }, won(p.amount) + '원'),
@@ -416,16 +417,17 @@ export async function renderTenantPayments({ params, query }) {
     if (p.source === 'bank') requireAuth({ title: '은행 확인 입금을 되돌릴까요?', desc: desc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '되돌리기', onConfirm });
     else confirmSheet({ title: '이 입금을 되돌릴까요?', desc, confirmText: '되돌리기', danger: true, onConfirm });
   };
-  const toDeposit = (p) => confirmSheet({
-    title: '이 입금을 보증금으로 옮길까요?',
-    desc: `${formatMonth(p.month)}치 · ${won(p.amount)}원을 월세에서 빼고 “받은 보증금”으로 옮겨요. (보증금 화면에서 확인·되돌리기 가능)`,
-    confirmText: '보증금으로 옮기기',
-    onConfirm: async () => {
+  const toDeposit = (p) => {
+    const desc = `${formatMonth(p.month)}치 · ${won(p.amount)}원을 월세에서 빼고 “받은 보증금”으로 옮겨요. (보증금 화면에서 확인·되돌리기 가능)`;
+    const onConfirm = async () => {
       await store.addLedger({ tenantId: t.id, type: 'in', amount: p.amount, date: p.paidAt || (p.month + '-01'), memo: '월세에서 옮김' + (p.depositorName ? ' · ' + p.depositorName : ''), accountId: p.accountId || null, source: p.source || 'manual' });
       await store.deletePayment(p.id);
       toast('보증금으로 옮겼어요', 'ok'); refresh();
-    },
-  });
+    };
+    // 은행에서 확인된 입금을 옮기면 은행 기록이 지워지므로 지문·비밀번호로 확인
+    if (p.source === 'bank') requireAuth({ title: '은행 확인 입금을 보증금으로 옮길까요?', desc: desc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '보증금으로 옮기기', onConfirm });
+    else confirmSheet({ title: '이 입금을 보증금으로 옮길까요?', desc, confirmText: '보증금으로 옮기기', onConfirm });
+  };
 
   const payCard = (p) => h('div', { class: 'card' },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } },

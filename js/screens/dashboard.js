@@ -208,7 +208,12 @@ function unmatchedCard(p, tenants, refresh, isFirst) {
             close(); toast('세입자에 연결했어요', 'ok'); refresh();
           },
         }, icon('check'), '이 세입자로 연결'),
-        h('button', { class: 'btn btn--ghost', onClick: () => confirmSheet({ title: '이 입금을 지울까요?', desc: `입금자명 ${p.depositorName || '(없음)'} · ${won(p.amount)}원 기록을 지워요. 세입자에 연결하지 않고 지우면 이 입금은 사라져요.`, confirmText: '지우기', danger: true, onConfirm: async () => { await store.deletePayment(p.id); close(); toast('지웠어요', 'ok'); refresh(); } }) }, icon('trash'), '이 입금 삭제'),
+        h('button', { class: 'btn btn--ghost', onClick: () => {
+          const desc = `입금자명 ${p.depositorName || '(없음)'} · ${won(p.amount)}원 기록을 지워요. 세입자에 연결하지 않고 지우면 이 입금은 사라져요.`;
+          const onConfirm = async () => { await store.deletePayment(p.id); close(); toast('지웠어요', 'ok'); refresh(); };
+          if (p.source === 'bank') requireAuth({ title: '은행 확인 입금을 지울까요?', desc: desc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '지우기', onConfirm });
+          else confirmSheet({ title: '이 입금을 지울까요?', desc, confirmText: '지우기', danger: true, onConfirm });
+        } }, icon('trash'), '이 입금 삭제'),
       );
     },
   });

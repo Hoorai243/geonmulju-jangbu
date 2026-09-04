@@ -5,6 +5,7 @@ import { screen, topbar, emptyState, banner } from '../ui/shell.js';
 import * as store from '../store.js';
 import { navigate } from '../router.js';
 import { coachMark } from '../ui/coach.js';
+import { requireAuth } from '../ui/authgate.js';
 
 /* ---------- 목록 ---------- */
 export async function renderDepositList() {
@@ -109,12 +110,12 @@ export async function renderDepositDetail({ params }) {
             const srcText = l.source === 'bank' ? '은행 확인' : '직접 입력';
             // 되돌리면 보관액이 어떻게 되는지 미리 계산
             const afterHeld = l.type === 'in' ? s.held - l.amount : s.held + l.amount;
-            const undo = () => confirmSheet({
-              title: '이 기록을 되돌릴까요?',
-              desc: `${ti.label} ${won(l.amount)}원(${srcText})을 지우면 현재 보관액이 ${won(afterHeld)}원으로 바뀌어요.`,
-              confirmText: '되돌리기',
-              onConfirm: async () => { await store.deleteLedger(l.id); toast('되돌렸어요', 'ok'); refresh(); },
-            });
+            const undoDesc = `${ti.label} ${won(l.amount)}원(${srcText})을 지우면 현재 보관액이 ${won(afterHeld)}원으로 바뀌어요.`;
+            const doUndo = async () => { await store.deleteLedger(l.id); toast('되돌렸어요', 'ok'); refresh(); };
+            // 은행에서 확인된 기록은 지울 때 지문·비밀번호로 확인
+            const undo = () => (l.source === 'bank'
+              ? requireAuth({ title: '은행 확인 기록을 지울까요?', desc: undoDesc + ' 은행에서 확인된 기록이라 지문·비밀번호로 확인해요.', confirmText: '되돌리기', onConfirm: doUndo })
+              : confirmSheet({ title: '이 기록을 되돌릴까요?', desc: undoDesc, confirmText: '되돌리기', onConfirm: doUndo }));
             return h('div', { class: 'card', style: { display: 'flex', alignItems: 'center', gap: '12px' } },
               h('span', { class: `chip chip--${ti.cls}` }, ti.label),
               h('div', { class: 'rowcard__main' },
