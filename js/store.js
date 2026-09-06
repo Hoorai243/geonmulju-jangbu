@@ -350,28 +350,24 @@ export async function tenantLedger(tenant, upto = monthKey()) {
   for (const p of pays) byMonth[p.month] = (byMonth[p.month] || 0) + (Number(p.amount) || 0);
   const map = new Map();
   const today = todayISO();
-  // 선납(앞으로)·후납(뒤로) 둘 다 반영: 전체 낸 돈을 오래된 달부터 채운다.
-  // 이러면 밀렸다가 나중에 몰아 낸 달도 '완납'으로 잡히고, 미리 낸 돈은 다음 달을 덮는다.
-  let net = 0, m = start, guard = 0;
-  let pool = 0;                          // 전체 납부액 풀
-  while (start && compareMonth(m, end) <= 0 && guard++ < 800) { pool += (byMonth[m] || 0); m = addMonths(m, 1); }
-  const totalPool = pool;
-  m = start; guard = 0;
+  // 전진 이월(선납): 그 달 입금 + 지난 선납으로 그 달을 채운다. "이번 달 냈나"를 정확히 보여줌.
+  // (후납=밀렸다 나중에 갚음은 대시보드가 아니라 '납부 요약'에서만 따로 반영한다)
+  let credit = 0, net = 0, m = start, guard = 0;
   while (start && compareMonth(m, end) <= 0 && guard++ < 800) {
     const due = ratesForMonth(tenant, m).total;
     const paid = byMonth[m] || 0;
-    let state, cov = 0;
-    if (due <= 0) { state = paid > 0 ? 'ok' : 'idle'; }
-    else {
-      cov = Math.min(pool, due); pool -= cov;   // 오래된 달부터 채움(후납·선납 모두 반영)
-      state = cov >= due ? 'ok' : cov > 0 ? 'part' : (isOverdue(tenant, m, today) ? 'bad' : 'idle');
-    }
-    map.set(m, { state, due, paid, avail: cov, remaining: due > 0 ? Math.max(0, due - cov) : 0, carried: due > 0 && paid < due && cov >= due });
-    net += paid - due;
+    const avail = credit + paid;         // 이월된 선납 + 이 달 입금
+    let state;
+    if (due <= 0) state = paid > 0 ? 'ok' : 'idle';
+    else if (avail >= due) state = 'ok';
+    else if (avail > 0) state = 'part';
+    else state = isOverdue(tenant, m, today) ? 'bad' : 'idle';
+    map.set(m, { state, due, paid, avail, remaining: due > 0 ? Math.max(0, due - avail) : 0, carried: due > 0 && paid < due && avail >= due });
+    credit = Math.max(0, avail - due);   // 남은 선납 다음 달로 이월
+    net += paid - due;                   // 전체 순액(+선납 / -밀림)
     m = addMonths(m, 1);
   }
-  const credit = Math.max(0, pool);      // 다 채우고 남은 선납
-  return { map, net, credit, totalPool };
+  return { map, net, credit };
 }
 
 // 월세/관리비 분리 정산 (선택 구간). 관리비성 입금(수도/전기/관리비 이름·수기 관리비·그달 관리비 이하 소액)을
@@ -429,11 +425,17 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
     rows.push({ month: m, rentRem, feeRem, rentExtra: rentExtra + pool, feeExtra });
     m = addMonths(m, 1);
   }
-  // 넘친 몫을 오래된 미납부터 이월. 월세 남은 것 먼저 메꾸고, 그래도 남은 월세 초과분은 관리비로 넘긴다.
+  // 넘친 몫을 오래된 미납부터 이월. 각자(월세→월세, 관리비→관리비) 먼저 메꾸고,
+  // 그래도 남은 초과분은 서로 넘긴다(월세 초과→관리비 미납, 관리비 초과→월세 미납).
+  // 이래야 '월세 부족 + 관리비 부족' 합계가 전체 밀린 돈(순액)과 정확히 맞는다.
   let rentPool = rows.reduce((s, r) => s + r.rentExtra, 0);
   for (const r of rows) { if (rentPool <= 0) break; if (r.rentRem > 0) { const c = Math.min(rentPool, r.rentRem); r.rentRem -= c; rentPool -= c; } }
-  let feePool = rows.reduce((s, r) => s + r.feeExtra, 0) + rentPool; // 월세보다 많이 낸 몫 → 관리비로
+  let feePool = rows.reduce((s, r) => s + r.feeExtra, 0);
   for (const r of rows) { if (feePool <= 0) break; if (r.feeRem > 0) { const c = Math.min(feePool, r.feeRem); r.feeRem -= c; feePool -= c; } }
+  // 남은 초과분(월세·관리비 통합)으로 남은 미납을 마저 메꾼다 — 월세 미납 먼저, 그다음 관리비 미납
+  let extra = rentPool + feePool;
+  for (const r of rows) { if (extra <= 0) break; if (r.rentRem > 0) { const c = Math.min(extra, r.rentRem); r.rentRem -= c; extra -= c; } }
+  for (const r of rows) { if (extra <= 0) break; if (r.feeRem > 0) { const c = Math.min(extra, r.feeRem); r.feeRem -= c; extra -= c; } }
 
   const rentMissed = rows.filter((r) => r.rentRem > 0).map((r) => ({ month: r.month, short: r.rentRem }));
   const feeMissed = rows.filter((r) => r.feeRem > 0).map((r) => ({ month: r.month, short: r.feeRem }));
@@ -446,8 +448,18 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
 export async function lateCountCarry(tenant, upto = monthKey()) {
   const last = addMonths(upto, -1); // 이번 달은 진행 중일 수 있어 제외
   const { map } = await tenantLedger(tenant, last);
+  const months = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
+  // 후납(밀렸다 나중에 갚음)까지 반영: 전체 낸 돈을 오래된 달부터 채우고, 끝까지 못 채운 달만 센다.
+  // (요약의 '완납 못한 달'과 같은 기준 — 세입자 상세의 '밀림 횟수'와 숫자가 어긋나지 않게)
+  let pool = 0;
+  for (const [, s] of map) pool += s.paid;
   let n = 0;
-  for (const [, s] of map) if (s.due > 0 && s.state !== 'ok') n++;
+  for (const mm of months) {
+    const s = map.get(mm);
+    if (s.due <= 0) continue;
+    const cov = Math.min(pool, s.due); pool -= cov;
+    if (cov < s.due) n++;
+  }
   return n;
 }
 

@@ -345,13 +345,26 @@ export async function renderTenantSummary({ params, query = {} }) {
   const to = query.to || (allMonths[allMonths.length - 1] || '');
   const filtered = query.from || query.to;
   const months = allMonths.filter((m) => (!query.from || m >= query.from) && (!query.to || m <= query.to));
+  // '결국 완납했나' 상태(후납 반영): 이 구간 낸 돈을 오래된 달부터 채운다. 점 색·완납못한달에만 씀.
+  // (그 달 현금흐름은 아래 차이/누적으로 따로 보여줌)
+  const netState = new Map();
+  {
+    let pool = months.reduce((sum, mm) => sum + (map.get(mm)?.paid || 0), 0);
+    for (const mm of months) {
+      const s = map.get(mm);
+      if (s.due <= 0) { netState.set(mm, s.paid > 0 ? 'ok' : 'idle'); continue; }
+      const cov = Math.min(pool, s.due); pool -= cov;
+      netState.set(mm, cov >= s.due ? 'ok' : cov > 0 ? 'part' : s.state);
+    }
+  }
   let totalDue = 0, totalPaid = 0, lateCount = 0, running = 0;
   const rows = months.map((m) => {
     const s = map.get(m);
     totalDue += s.due; totalPaid += s.paid;
-    if (s.due > 0 && s.state !== 'ok') lateCount++;
+    const ns = netState.get(m) || s.state;
+    if (s.due > 0 && ns !== 'ok') lateCount++;
     running += s.paid - s.due;   // 선택한 구간 안에서의 누적
-    return { m, s, running };
+    return { m, s, running, ns };
   });
   const diff = totalPaid - totalDue;
 
@@ -441,15 +454,15 @@ export async function renderTenantSummary({ params, query = {} }) {
           h('div', { style: { overflowX: 'auto' } },
             h('table', { class: 'table', style: { width: '100%', minWidth: '420px' } },
               h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '차이'), h('th', { class: 'num' }, '누적'))),
-              h('tbody', {}, ...rows.map(({ m, s, running }) => { const d = s.paid - s.due; return h('tr', {},
-                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2)),
+              h('tbody', {}, ...rows.map(({ m, s, running, ns }) => { const d = s.paid - s.due; return h('tr', {},
+                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(ns), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2)),
                 h('td', { class: 'num' }, s.due ? won(s.due) : '-'),
                 h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? won(s.paid) : '-'),
                 h('td', { class: 'num', style: { fontWeight: 700, color: d < 0 ? 'var(--bad-ink)' : d > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, d === 0 ? '0' : (d > 0 ? '+' : '') + won(d)),
                 h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + won(running))); })),
               h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
                 h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff))))))),
-      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“차이”는 그 달 하나만 본 것(받음−청구), “누적”은 그 달까지 합친 것이에요. −는 밀림, +는 미리 냄. 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
+      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“차이”는 그 달 하나만 본 것(받음−청구), “누적”은 그 달까지 합친 것이에요. −는 밀림, +는 미리 냄. 왼쪽 점은 나중에 갚은 것(후납)까지 쳐서 그 달이 “결국 다 받았는지”예요(초록 완납·노랑 부분·빨강 미납·회색 미확인).'),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '전체 이미지')),

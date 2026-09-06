@@ -428,8 +428,12 @@ async function summaryReport(t, { from = '', to = '' } = {}) {
   const { map } = await store.tenantLedger(t, upto);
   const all = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
   const months = all.filter((m) => (!from || m >= from) && (!to || m <= to));
+  // 후납 반영 상태(점 색·완납못한달) — 화면과 똑같이. 전체 낸 돈을 오래된 달부터 채움.
+  const netState = new Map();
+  { let pool = months.reduce((sum, mm) => sum + (map.get(mm)?.paid || 0), 0);
+    for (const mm of months) { const s = map.get(mm); if (s.due <= 0) { netState.set(mm, s.paid > 0 ? 'ok' : 'idle'); continue; } const cov = Math.min(pool, s.due); pool -= cov; netState.set(mm, cov >= s.due ? 'ok' : cov > 0 ? 'part' : s.state); } }
   let totalDue = 0, totalPaid = 0, lateCount = 0, running = 0; const rows = [];
-  for (const m of months) { const s = map.get(m); totalDue += s.due; totalPaid += s.paid; if (s.due > 0 && s.state !== 'ok') lateCount++; running += s.paid - s.due; rows.push({ m, due: s.due, paid: s.paid, state: s.state, running }); }
+  for (const m of months) { const s = map.get(m); const ns = netState.get(m) || s.state; totalDue += s.due; totalPaid += s.paid; if (s.due > 0 && ns !== 'ok') lateCount++; running += s.paid - s.due; rows.push({ m, due: s.due, paid: s.paid, state: ns, running }); }
   const filtered = !!(from || to);
   return { t, rows, totalDue, totalPaid, diff: totalPaid - totalDue, lateCount, filtered, periodLabel: filtered ? `${from || '처음'}~${to || '지금'}` : '전체기간' };
 }
