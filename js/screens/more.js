@@ -60,7 +60,7 @@ export async function renderMore() {
       ),
 
       h('button', { class: 'btn btn--secondary btn--lg', onClick: () => { auth.lock(); navigate('/login', { replace: true }); } }, icon('lock'), '앱 잠그기'),
-      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.46.0'),
+      h('div', { class: 'center muted', style: { fontSize: '0.85rem' } }, '건물주 장부 v1.46.1'),
       h('div', { style: { height: '12px' } }),
     ),
   );
@@ -96,7 +96,8 @@ function promptBackupPassword(onPassword) {
   setTimeout(() => pw.focus(), 100);
 }
 function restore() {
-  const input = h('input', { type: 'file', accept: '.jbk,.json,application/json', style: { display: 'none' } });
+  // accept 를 좁게(.jbk 등) 잡으면 안드로이드 파일 선택창에서 파일이 안 보여 못 고름 → 제한 없이 모두 보이게.
+  const input = h('input', { type: 'file', style: { display: 'none' } });
   input.onchange = async () => {
     const file = input.files[0]; if (!file) return;
     let parsed;

@@ -68,7 +68,7 @@ export async function backupNow() {
       try {
         const enc = await auth.encryptBackup(p, await db.exportAll());
         const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
-        const r = await saveFile(`건물주장부_백업_${monthKey()}.jbk`, blob);
+        const r = await saveFile(`건물주장부_백업_${monthKey()}.json`, blob);
         if (r.ok) await db.metaSet('lastBackupAt', new Date().toISOString());
         ctrl.close(); resolve(r);
       } catch (e) { console.warn('백업 실패', e); toast('백업에 실패했어요.', 'bad'); }
