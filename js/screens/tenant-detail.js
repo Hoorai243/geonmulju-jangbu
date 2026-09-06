@@ -334,21 +334,31 @@ function confirmDelete(t) {
 }
 
 // 납부 요약(전체 정산) — 계약/장부 시작부터 지금까지 달마다 청구·받음·누적(밀림/선납)과 총 차액.
-export async function renderTenantSummary({ params }) {
+export async function renderTenantSummary({ params, query = {} }) {
   const t = await store.getTenant(params.id);
   if (!t) { navigate('/tenants', { replace: true }); return h('div'); }
   const upto = (t.status === 'movedout' && t.movedOutAt) ? monthKey(new Date(t.movedOutAt)) : monthKey();
   const { map } = await store.tenantLedger(t, upto);
-  const months = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
+  const allMonths = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
+  // 기간 선택(없으면 전체)
+  const from = query.from || (allMonths[0] || '');
+  const to = query.to || (allMonths[allMonths.length - 1] || '');
+  const filtered = query.from || query.to;
+  const months = allMonths.filter((m) => (!query.from || m >= query.from) && (!query.to || m <= query.to));
   let totalDue = 0, totalPaid = 0, lateCount = 0, running = 0;
   const rows = months.map((m) => {
     const s = map.get(m);
     totalDue += s.due; totalPaid += s.paid;
     if (s.due > 0 && s.state !== 'ok') lateCount++;
-    running += s.paid - s.due;
+    running += s.paid - s.due;   // 선택한 구간 안에서의 누적
     return { m, s, running };
   });
   const diff = totalPaid - totalDue;
+
+  const fromInput = h('input', { class: 'input', type: 'month', value: query.from || '' });
+  const toInput = h('input', { class: 'input', type: 'month', value: query.to || '' });
+  const applyRange = () => navigate('/tenant/' + t.id + '/summary' + qstr(fromInput.value, toInput.value));
+  fromInput.onchange = applyRange; toInput.onchange = applyRange;
   const signWon = (n) => (n < 0 ? '-' : n > 0 ? '+' : '') + won(Math.abs(n)) + '원';
   const bigResult = diff < 0
     ? h('strong', { class: 'amount won amount--big', style: { color: 'var(--bad-ink)' } }, '밀린 돈 ' + won(-diff) + '원')
@@ -359,10 +369,17 @@ export async function renderTenantSummary({ params }) {
   return screen({ plain: true },
     topbar({ title: '납부 요약', sub: `${unitLabel(t.unit)} ${t.name}`, back: '/tenant/' + t.id }),
     h('div', { class: 'stack-lg' },
+      h('div', { class: 'card stack' },
+        h('div', { style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' } },
+          h('div', { class: 'field', style: { margin: 0, flex: 1, minWidth: '120px' } }, h('label', { class: 'label' }, '시작월'), fromInput),
+          h('div', { class: 'field', style: { margin: 0, flex: 1, minWidth: '120px' } }, h('label', { class: 'label' }, '끝월'), toInput)),
+        filtered ? h('button', { class: 'btn btn--ghost', onClick: () => navigate('/tenant/' + t.id + '/summary') }, '전체 기간 보기') : null,
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, filtered ? `${from ? formatMonth(from) : '처음'} ~ ${to ? formatMonth(to) : '지금'}만 보는 중` : '전체 기간'),
+      ),
       h('div', { class: 'card' },
         h('dl', { class: 'deflist' },
-          dt('지금까지 청구'), dd(won(totalDue) + '원'),
-          dt('지금까지 받음'), dd(won(totalPaid) + '원'),
+          dt(filtered ? '이 기간 청구' : '지금까지 청구'), dd(won(totalDue) + '원'),
+          dt(filtered ? '이 기간 받음' : '지금까지 받음'), dd(won(totalPaid) + '원'),
           dt('완납 못한 달'), dd(lateCount + '번')),
         h('hr', { class: 'hr' }),
         h('div', { style: { textAlign: 'center', padding: '4px 0' } }, bigResult)),
