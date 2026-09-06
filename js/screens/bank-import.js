@@ -81,11 +81,12 @@ export async function renderBankImport() {
       (isDup(t) ? map.get(key).dup : map.get(key).live).push(t);
     }
     const groups = [...map.values()];
-    // 초기 결정: 기억한 별칭 → 제외 목록 → 느슨한 매칭
+    // 초기 결정: 제외 목록(가장 셈) → 기억한 별칭 → 느슨한 매칭
+    // 제외를 별칭보다 먼저 봐야 함 — "제외로 저장했는데 옛 별칭 때문에 또 딴 세입자로 붙는" 문제 방지.
     for (const g of groups) {
       let d = '';
-      if (rules.aliases[g.key] && tenants.find((t) => t.id === rules.aliases[g.key])) d = rules.aliases[g.key];
-      else if (rules.ignores.includes(g.key)) d = 'ignore';
+      if (rules.ignores.includes(g.key)) d = 'ignore';
+      else if (rules.aliases[g.key] && tenants.find((t) => t.id === rules.aliases[g.key])) d = rules.aliases[g.key];
       else { const { suggestion } = matchDepositor(g.display, tenants); if (suggestion) d = suggestion.tenant.id; }
       g.decision = d;
       g.sum = [...g.live, ...g.dup].reduce((s, x) => s + x.amount, 0);
@@ -133,8 +134,11 @@ export async function renderBankImport() {
         for (const g of groups) {
           // 같은 이름에 건별로 다른 세입자를 골랐으면(예: "수도세") 그 이름은 자동연결로 기억하지 않음
           const hasRowOverride = g.live.some((t) => t.assignTo && t.assignTo !== '' && t.assignTo !== 'ignore');
-          if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
-          else if (g.decision) {
+          if (g.decision === 'ignore') {
+            if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key);
+            delete rules2.aliases[g.key]; // 제외하면 옛 별칭도 지운다(안 그러면 다음에 별칭이 되살아나 딴 세입자로 붙음)
+          } else if (g.decision) {
+            rules2.ignores = rules2.ignores.filter((k) => k !== g.key); // 세입자에 붙이면 제외목록에서 뺀다
             // "다음에도 자동 연결"이 켜져 있을 때만 이름을 기억. 끄면(이번만)·건별지정이면 기존 기억도 지움.
             if (g.remember === false || hasRowOverride) delete rules2.aliases[g.key];
             else rules2.aliases[g.key] = g.decision;
