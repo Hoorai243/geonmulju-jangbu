@@ -425,9 +425,18 @@ export async function renderTenantSummary({ params, query = {} }) {
           h('table', { class: 'table', style: { width: '100%', minWidth: '320px' } },
             h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '부족'))),
             h('tbody', {}, splitRow('월세', rentDue, rentPaid), splitRow('관리비', feeDue, feePaid)))),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.55' } },
-          h('div', { style: { fontWeight: 700, color: 'var(--ink-2)' } }, '어떻게 나눴나요? (짐작이에요)'),
-          '입금액이 그 달 관리비만큼 작거나, 입금자·메모에 “관리비·수도·전기”가 있으면 관리비로 봐요. 나머지는 월세로 보고, 월세보다 많이 낸 몫은 관리비로 넘겨요. 은행 입금엔 “이건 관리비”라는 표시가 없어서 100% 정확하진 않아요.')),
+        (() => {
+          const li = (...kids) => h('div', { style: { display: 'flex', gap: '7px', marginBottom: '5px' } },
+            h('span', { style: { color: 'var(--primary)', fontWeight: 800, flex: 'none' } }, '•'),
+            h('div', { style: { flex: 1 } }, ...kids));
+          const b = (s) => h('b', { style: { color: 'var(--ink)' } }, s);
+          return h('div', { style: { marginTop: '10px', padding: '11px 13px', background: 'var(--surface-2)', borderRadius: '10px', fontSize: 'var(--fs-sm)', lineHeight: '1.5', color: 'var(--ink-2)' } },
+            h('div', { style: { fontWeight: 800, marginBottom: '8px', color: 'var(--ink)' } }, '어떻게 나눴나요? ', h('span', { style: { fontWeight: 400, color: 'var(--ink-3)' } }, '(짐작이에요)')),
+            li(b('관리비'), '로 봐요 — 입금액이 그 달 ', b('관리비만큼 작거나'), ', 입금자·메모에 ', b('“관리비·수도·전기”'), '가 있을 때'),
+            li('나머지는 ', b('월세'), '로 봐요'),
+            li('월세보다 ', b('많이 낸 몫'), '은 관리비로 넘겨요'),
+            li('은행 입금엔 표시가 없어서 ', b('100% 정확하진 않아요')));
+        })()),
       rows.length === 0
         ? banner('info', { text: '아직 셈할 내역이 없어요.' })
         : h('div', { class: 'card' },
