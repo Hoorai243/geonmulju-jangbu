@@ -55,24 +55,31 @@ async function tenantReport(t, { bankOnly = false } = {}) {
   const byMonth = {};
   pays.forEach((p) => (byMonth[p.month] || (byMonth[p.month] = [])).push(p));
 
+  const noteOf = (p) => (p.source === 'bank' ? '은행 확인' : (p.note ? p.note : '직접 입력'));
   const groups = [];
-  let m = start, total = 0, empty = 0, months = 0, guard = 0;
+  let m = start, total = 0, totalDue = 0, months = 0, guard = 0;
   while (compareMonth(m, end) <= 0 && guard++ < 600) {
     months++;
-    const ps = byMonth[m] || [];
+    const due = store.ratesForMonth(t, m).total;   // 그 달 냈어야 할 금액(청구)
+    totalDue += due;
+    const ps = (byMonth[m] || []).slice().sort((a, b) => ((a.paidAt || '') < (b.paidAt || '') ? -1 : 1));
     if (ps.length === 0) {
-      empty++;
-      groups.push({ month: m, empty: true, rows: [{ date: '', payer: '입금 없음', amount: null }] });
+      groups.push({ month: m, due, rows: [{ date: '', payer: '입금 없음', amount: null, note: '' }] });
     } else {
       total += ps.reduce((s, p) => s + p.amount, 0);
-      groups.push({ month: m, empty: false, rows: ps.map((p) => ({ date: p.paidAt, payer: (p.depositorName || '-') + srcTag(p), amount: p.amount, source: p.source })) });
+      groups.push({ month: m, due, rows: ps.map((p) => ({ date: p.paidAt, payer: p.depositorName || '-', amount: p.amount, source: p.source, note: noteOf(p) })) });
     }
     m = addMonths(m, 1);
   }
+  // 보증금 내역(은행 입금 포함) — 세입자 거래내역에 같이 보여준다
+  const ledger = await store.getLedger(t.id);
+  const TYPE = { in: '보증금 받음', deduct: '보증금 차감', refund: '보증금 환불' };
+  const deposits = (bankOnly ? ledger.filter((l) => l.source === 'bank') : ledger)
+    .map((l) => ({ date: l.date, type: TYPE[l.type] || l.type, amount: l.amount, memo: (l.source === 'bank' ? '은행 · ' : '') + (l.memo || l.category || '') }));
   const dates = pays.map((p) => p.paidAt).filter(Boolean).sort();
   return {
-    title: `${t.name}${t.businessName ? '(' + t.businessName + ')' : ''} — 실제 입금내역${bankOnly ? ' (은행 확인분만)' : ''}`,
-    groups, total, empty, months, bankCount, manualCount, bankOnly,
+    title: `${t.name}${t.businessName ? '(' + t.businessName + ')' : ''} — 거래내역${bankOnly ? ' (은행 확인분만)' : ''}`,
+    groups, total, totalDue, months, bankCount, manualCount, bankOnly, deposits,
     periodStart: dates[0] || (start + '-01'),
     periodEnd: dates[dates.length - 1] || todayISO(),
   };
@@ -110,18 +117,22 @@ function saveCanvas(cv, filename) {
 }
 
 const TCOLS = [
-  { label: '월', w: 16, align: 'center' },
-  { label: '거래일', w: 20, align: 'center' },
-  { label: '실제 입금자', w: 40, align: 'left' },
-  { label: '개별 입금액', w: 24, align: 'right' },
+  { label: '월', w: 11, align: 'center' },
+  { label: '거래일', w: 15, align: 'center' },
+  { label: '입금자', w: 23, align: 'left' },
+  { label: '청구', w: 17, align: 'right' },
+  { label: '입금액', w: 17, align: 'right' },
+  { label: '비고', w: 17, align: 'left' },
 ];
 
 export async function exportTenantImage(t, opts = {}) {
   const rep = await tenantReport(t, opts);
-  const W = 1240, mx = 70, CW = W - mx * 2;
-  const rowH = 58, headerH = 64, titleH = 118, sumH = 150, subH = 56, footH = 66, top = 64;
+  const W = 1320, mx = 60, CW = W - mx * 2;
+  const rowH = 54, headerH = 60, titleH = 112, sumH = 140, subH = 52, footH = 62, top = 60;
   const totalRows = rep.groups.reduce((s, g) => s + g.rows.length, 0);
-  const H = top + titleH + sumH + subH + headerH + totalRows * rowH + footH + 70;
+  const dep = rep.deposits || [];
+  const depBlock = dep.length ? (52 + headerH + dep.length * rowH + footH + 24) : 0;
+  const H = top + titleH + sumH + subH + headerH + totalRows * rowH + footH + depBlock + 60;
   const { cv, ctx } = makeCanvas(W, H);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
 
@@ -129,61 +140,91 @@ export async function exportTenantImage(t, opts = {}) {
   const colX = (i) => xs[i], colW = (i) => CW * TCOLS[i].w / 100;
 
   let y = top;
-  // 제목바
   ctx.fillStyle = hx(C.navy); ctx.fillRect(mx, y, CW, titleH);
-  cell(ctx, rep.title, mx, y, CW, titleH, { align: 'center', color: C.white, font: FONT('800 40px') });
+  cell(ctx, rep.title, mx, y, CW, titleH, { align: 'center', color: C.white, font: FONT('800 38px') });
   y += titleH;
-  // 요약 밴드
+  // 요약 밴드: 확인기간(개월) · 총 청구 · 총 실제입금
   ctx.fillStyle = hx(C.beige); ctx.fillRect(mx, y, CW, sumH);
-  const stats = [['전체 확인기간', rep.months + '개월'], ['빈 달', rep.empty + '개월'], ['전체 실제 총입금', won(rep.total) + '원']];
+  const stats = [['확인 기간', rep.months + '개월'], ['총 청구(냈어야 할)', won(rep.totalDue) + '원'], ['총 실제 입금', won(rep.total) + '원']];
   const bw = CW / 3;
   stats.forEach((s, i) => {
-    cell(ctx, s[0], mx + bw * i, y + 10, bw, 44, { align: 'center', color: C.ink, font: FONT('700 24px') });
-    cell(ctx, s[1], mx + bw * i, y + 66, bw, 60, { align: 'center', color: C.teal, font: FONT('800 38px') });
+    cell(ctx, s[0], mx + bw * i, y + 12, bw, 40, { align: 'center', color: C.ink, font: FONT('700 23px') });
+    cell(ctx, s[1], mx + bw * i, y + 60, bw, 56, { align: 'center', color: i === 1 ? C.ink : C.teal, font: FONT('800 34px') });
   });
   y += sumH;
-  // 확인기간
   ctx.fillStyle = hx(C.mint); ctx.fillRect(mx, y, CW, subH);
-  cell(ctx, `확인기간 ${rep.periodStart} → ${rep.periodEnd}`, mx, y, CW, subH, { align: 'center', color: C.teal, font: FONT('700 25px') });
+  cell(ctx, `확인기간 ${rep.periodStart} → ${rep.periodEnd}`, mx, y, CW, subH, { align: 'center', color: C.teal, font: FONT('700 24px') });
   y += subH;
   // 헤더
   ctx.fillStyle = hx(C.teal); ctx.fillRect(mx, y, CW, headerH);
-  TCOLS.forEach((c, i) => cell(ctx, c.label, colX(i), y, colW(i), headerH, { align: c.align === 'right' ? 'right' : 'center', color: C.white, font: FONT('700 25px') }));
+  TCOLS.forEach((c, i) => cell(ctx, c.label, colX(i), y, colW(i), headerH, { align: c.align === 'right' ? 'right' : c.align === 'left' ? 'left' : 'center', color: C.white, font: FONT('700 24px') }));
   const tableTop = y; y += headerH;
-  // 행(월 그룹)
   let gi = 0;
   for (const g of rep.groups) {
     const gTop = y, gH = g.rows.length * rowH;
     ctx.fillStyle = hx(gi % 2 === 0 ? C.white : C.zebra); ctx.fillRect(mx, gTop, CW, gH);
-    // 월 (그룹 병합, 세로 중앙)
-    cell(ctx, formatMonth(g.month).replace('년 ', '.').replace('월', ''), colX(0), gTop, colW(0), gH, { align: 'center', color: C.ink, font: FONT('700 24px') });
+    cell(ctx, formatMonth(g.month).replace('년 ', '.').replace('월', ''), colX(0), gTop, colW(0), gH, { align: 'center', color: C.ink, font: FONT('700 23px') });
+    cell(ctx, g.due ? won(g.due) + '원' : '-', colX(3), gTop, colW(3), gH, { align: 'right', color: C.gray, font: FONT('600 22px') }); // 청구(월 병합)
     g.rows.forEach((r, ri) => {
       const ry = gTop + ri * rowH;
       if (r.amount == null) {
-        cell(ctx, '입금 없음', colX(1), ry, colW(1) + colW(2), rowH, { align: 'center', color: C.gray, font: FONT('600 23px') });
-        cell(ctx, '-', colX(3), ry, colW(3), rowH, { align: 'right', color: C.gray, font: FONT('600 23px') });
+        cell(ctx, '입금 없음', colX(1), ry, colW(1) + colW(2), rowH, { align: 'center', color: C.gray, font: FONT('600 22px') });
+        cell(ctx, '-', colX(4), ry, colW(4), rowH, { align: 'right', color: C.gray, font: FONT('600 22px') });
       } else {
-        cell(ctx, r.date, colX(1), ry, colW(1), rowH, { align: 'center', color: C.ink });
-        cell(ctx, r.payer, colX(2), ry, colW(2), rowH, { align: 'left', color: C.ink });
-        cell(ctx, won(r.amount) + '원', colX(3), ry, colW(3), rowH, { align: 'right', color: C.ink, font: FONT('700 24px') });
+        cell(ctx, r.date, colX(1), ry, colW(1), rowH, { align: 'center', color: C.ink, font: FONT('600 21px') });
+        cell(ctx, r.payer, colX(2), ry, colW(2), rowH, { align: 'left', color: C.ink, font: FONT('600 21px') });
+        cell(ctx, won(r.amount) + '원', colX(4), ry, colW(4), rowH, { align: 'right', color: C.ink, font: FONT('700 23px') });
+        cell(ctx, r.note || '', colX(5), ry, colW(5), rowH, { align: 'left', color: r.source === 'bank' ? C.gray : C.warn, font: FONT('600 20px') });
       }
     });
     ctx.strokeStyle = hx(C.line); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mx, gTop + gH + 0.5); ctx.lineTo(mx + CW, gTop + gH + 0.5); ctx.stroke();
     y += gH; gi++;
   }
-  // 열 구분선(세로, 은은하게)
   ctx.strokeStyle = hx(C.line); ctx.lineWidth = 1;
   for (let i = 1; i < TCOLS.length; i++) { ctx.beginPath(); ctx.moveTo(colX(i) + 0.5, tableTop); ctx.lineTo(colX(i) + 0.5, y); ctx.stroke(); }
-  // 바깥 테두리
-  ctx.strokeStyle = hx(C.line); ctx.strokeRect(mx + 0.5, tableTop + 0.5, CW, y - tableTop);
-  // 합계
+  ctx.strokeRect(mx + 0.5, tableTop + 0.5, CW, y - tableTop);
+  // 합계(청구·입금)
   ctx.fillStyle = hx(C.beige); ctx.fillRect(mx, y, CW, footH);
-  cell(ctx, `합계 · 빈 달 ${rep.empty}개월`, mx, y, CW / 2, footH, { align: 'left', color: C.ink, font: FONT('800 26px') });
-  cell(ctx, won(rep.total) + '원', colX(3), y, colW(3), footH, { align: 'right', color: C.ink, font: FONT('800 26px') });
+  cell(ctx, '합계', mx, y, colW(0) + colW(1) + colW(2), footH, { align: 'left', color: C.ink, font: FONT('800 25px') });
+  cell(ctx, won(rep.totalDue) + '원', colX(3), y, colW(3), footH, { align: 'right', color: C.ink, font: FONT('800 23px') });
+  cell(ctx, won(rep.total) + '원', colX(4), y, colW(4), footH, { align: 'right', color: C.ink, font: FONT('800 23px') });
   ctx.strokeStyle = hx(C.teal); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, y + 0.5); ctx.lineTo(mx + CW, y + 0.5); ctx.stroke();
+  y += footH;
 
-  saveCanvas(cv, `입금내역_${unitLabel(t.unit)}_${t.name}${opts.bankOnly ? '_은행확인분' : ''}.png`);
+  // 보증금 내역 (은행 입금 포함)
+  if (dep.length) {
+    y += 24;
+    const dcols = [{ w: 20, a: 'center' }, { w: 26, a: 'left' }, { w: 24, a: 'right' }, { w: 30, a: 'left' }];
+    const dxs = []; let dcx = mx; dcols.forEach((c) => { dxs.push(dcx); dcx += CW * c.w / 100; });
+    const dX = (i) => dxs[i], dW = (i) => CW * dcols[i].w / 100;
+    ctx.fillStyle = hx(C.navy); ctx.fillRect(mx, y, CW, 52);
+    cell(ctx, '보증금 내역', mx, y, CW, 52, { align: 'center', color: C.white, font: FONT('800 26px') });
+    y += 52;
+    ctx.fillStyle = hx(C.teal); ctx.fillRect(mx, y, CW, headerH);
+    ['날짜', '구분', '금액', '비고'].forEach((l, i) => cell(ctx, l, dX(i), y, dW(i), headerH, { align: dcols[i].a === 'right' ? 'right' : dcols[i].a === 'left' ? 'left' : 'center', color: C.white, font: FONT('700 24px') }));
+    const dTop = y; y += headerH;
+    let held = 0;
+    dep.forEach((d, i) => {
+      ctx.fillStyle = hx(i % 2 === 0 ? C.white : C.zebra); ctx.fillRect(mx, y, CW, rowH);
+      const isIn = /받음/.test(d.type);
+      held += isIn ? d.amount : -d.amount;
+      cell(ctx, d.date, dX(0), y, dW(0), rowH, { align: 'center', color: C.ink, font: FONT('600 21px') });
+      cell(ctx, d.type, dX(1), y, dW(1), rowH, { align: 'left', color: isIn ? C.teal : C.bad, font: FONT('700 22px') });
+      cell(ctx, (isIn ? '' : '-') + won(d.amount) + '원', dX(2), y, dW(2), rowH, { align: 'right', color: isIn ? C.ink : C.bad, font: FONT('700 22px') });
+      cell(ctx, d.memo || '', dX(3), y, dW(3), rowH, { align: 'left', color: C.gray, font: FONT('600 20px') });
+      y += rowH;
+    });
+    ctx.strokeStyle = hx(C.line); ctx.lineWidth = 1;
+    for (let i = 1; i < dcols.length; i++) { ctx.beginPath(); ctx.moveTo(dX(i) + 0.5, dTop); ctx.lineTo(dX(i) + 0.5, y); ctx.stroke(); }
+    ctx.strokeRect(mx + 0.5, dTop + 0.5, CW, y - dTop);
+    ctx.fillStyle = hx(C.beige); ctx.fillRect(mx, y, CW, footH);
+    cell(ctx, '현재 보관 중', mx, y, dW(0) + dW(1), footH, { align: 'left', color: C.ink, font: FONT('800 24px') });
+    cell(ctx, won(held) + '원', dX(2), y, dW(2), footH, { align: 'right', color: C.ink, font: FONT('800 23px') });
+    ctx.strokeStyle = hx(C.teal); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, y + 0.5); ctx.lineTo(mx + CW, y + 0.5); ctx.stroke();
+  }
+
+  saveCanvas(cv, `거래내역_${unitLabel(t.unit)}_${t.name}${opts.bankOnly ? '_은행확인분' : ''}.png`);
 }
 
 /* ================= 엑셀(.xlsx, 서식 있음) ================= */
@@ -203,33 +244,32 @@ export async function exportTenantExcel(t, opts = {}) {
   try { EJS = await loadExcelJS(); } catch (e) { return toast(e.message, 'bad'); }
   const rep = await tenantReport(t, opts);
   const wb = new EJS.Workbook();
-  const ws = wb.addWorksheet('입금내역', {
+  const ws = wb.addWorksheet('거래내역', {
     views: [{ showGridLines: false }],
     pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
   });
-  ws.columns = [{ width: 13 }, { width: 16 }, { width: 30 }, { width: 18 }];
+  ws.columns = [{ width: 11 }, { width: 13 }, { width: 24 }, { width: 15 }, { width: 15 }, { width: 22 }];
   const FMT = '#,##0"원"';
 
   // 1 제목
-  ws.mergeCells('A1:D1'); ws.getRow(1).height = 42;
-  styleCell(ws.getCell('A1'), { fill: C.navy, font: { size: 18, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: 'center' } });
+  ws.mergeCells('A1:F1'); ws.getRow(1).height = 40;
+  styleCell(ws.getCell('A1'), { fill: C.navy, font: { size: 17, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: 'center' } });
   ws.getCell('A1').value = rep.title;
-  // 2 요약 라벨
-  ws.mergeCells('A2:B2'); ws.getRow(2).height = 22;
-  ['A2', 'C2', 'D2'].forEach((a, i) => { styleCell(ws.getCell(a), { fill: C.beige, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); ws.getCell(a).value = ['전체 확인기간', '빈 달', '전체 실제 총입금'][i]; });
-  // 3 요약 값
-  ws.mergeCells('A3:B3'); ws.getRow(3).height = 30;
-  const vals = [rep.months + '개월', rep.empty + '개월', won(rep.total) + '원'];
-  ['A3', 'C3', 'D3'].forEach((a, i) => { styleCell(ws.getCell(a), { fill: C.beige, font: { size: 15, bold: true, color: { argb: argb(C.teal) } }, align: { horizontal: 'center' } }); ws.getCell(a).value = vals[i]; });
+  // 2 요약 라벨 / 3 값 (확인기간 · 총청구 · 총입금)
+  ws.mergeCells('A2:B2'); ws.mergeCells('C2:D2'); ws.mergeCells('E2:F2'); ws.getRow(2).height = 22;
+  ['A2', 'C2', 'E2'].forEach((a, i) => { styleCell(ws.getCell(a), { fill: C.beige, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); ws.getCell(a).value = ['확인 기간', '총 청구(냈어야 할)', '총 실제 입금'][i]; });
+  ws.mergeCells('A3:B3'); ws.mergeCells('C3:D3'); ws.mergeCells('E3:F3'); ws.getRow(3).height = 28;
+  const vals = [rep.months + '개월', won(rep.totalDue) + '원', won(rep.total) + '원'];
+  ['A3', 'C3', 'E3'].forEach((a, i) => { styleCell(ws.getCell(a), { fill: C.beige, font: { size: 14, bold: true, color: { argb: argb(i === 1 ? C.ink : C.teal) } }, align: { horizontal: 'center' } }); ws.getCell(a).value = vals[i]; });
   // 4 확인기간
-  ws.mergeCells('A4:D4'); ws.getRow(4).height = 22;
+  ws.mergeCells('A4:F4'); ws.getRow(4).height = 22;
   styleCell(ws.getCell('A4'), { fill: C.mint, font: { size: 11, bold: true, color: { argb: argb(C.teal) } }, align: { horizontal: 'center' } });
   ws.getCell('A4').value = `확인기간 ${rep.periodStart} → ${rep.periodEnd}`;
   // 5 헤더
   ws.getRow(5).height = 24;
-  ['월', '거래일', '실제 입금자', '개별 입금액'].forEach((h, i) => {
+  ['월', '거래일', '입금자', '청구', '입금액', '비고'].forEach((h, i) => {
     const c = ws.getRow(5).getCell(i + 1);
-    styleCell(c, { fill: C.teal, font: { size: 11, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: i === 2 ? 'left' : i === 3 ? 'right' : 'center' } });
+    styleCell(c, { fill: C.teal, font: { size: 11, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: i === 2 || i === 5 ? 'left' : i === 3 || i === 4 ? 'right' : 'center' } });
     c.value = h;
   });
 
@@ -240,36 +280,68 @@ export async function exportTenantExcel(t, opts = {}) {
     g.rows.forEach((row) => {
       const R = ws.getRow(r); R.height = 20;
       styleCell(R.getCell(1), { fill: zebra, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } });
+      styleCell(R.getCell(4), { fill: zebra, font: { size: 11, color: { argb: argb(C.gray) } }, align: { horizontal: 'right' }, numFmt: FMT }); // 청구(월 병합)
       if (row.amount == null) {
         styleCell(R.getCell(2), { fill: zebra });
         styleCell(R.getCell(3), { fill: zebra, font: { size: 11, color: { argb: argb(C.gray) } }, align: { horizontal: 'center' } });
         R.getCell(3).value = '입금 없음';
-        styleCell(R.getCell(4), { fill: zebra, font: { size: 11, color: { argb: argb(C.gray) } }, align: { horizontal: 'right' } });
-        R.getCell(4).value = '-';
+        styleCell(R.getCell(5), { fill: zebra, font: { size: 11, color: { argb: argb(C.gray) } }, align: { horizontal: 'right' } });
+        R.getCell(5).value = '-';
+        styleCell(R.getCell(6), { fill: zebra });
       } else {
         styleCell(R.getCell(2), { fill: zebra, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } });
         R.getCell(2).value = row.date;
         styleCell(R.getCell(3), { fill: zebra, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'left' } });
         R.getCell(3).value = row.payer;
-        styleCell(R.getCell(4), { fill: zebra, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT });
-        R.getCell(4).value = row.amount;
+        styleCell(R.getCell(5), { fill: zebra, font: { size: 11, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT });
+        R.getCell(5).value = row.amount;
+        styleCell(R.getCell(6), { fill: zebra, font: { size: 10, color: { argb: argb(row.source === 'bank' ? C.gray : C.warn) } }, align: { horizontal: 'left' } });
+        R.getCell(6).value = row.note || '';
       }
       r++;
     });
     ws.getCell(first, 1).value = formatMonth(g.month).replace('년 ', '.').replace('월', '');
-    if (r - 1 > first) ws.mergeCells(first, 1, r - 1, 1);
+    ws.getCell(first, 4).value = g.due || 0;
+    if (r - 1 > first) { ws.mergeCells(first, 1, r - 1, 1); ws.mergeCells(first, 4, r - 1, 4); }
     gi++;
   }
-  // 합계
+  // 합계 (청구·입금)
   const R = ws.getRow(r); R.height = 26;
   ws.mergeCells(r, 1, r, 3);
   styleCell(R.getCell(1), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'left' } });
-  R.getCell(1).value = `합계 · 빈 달 ${rep.empty}개월 · 은행 ${rep.bankCount}건 / 직접 ${rep.manualCount}건`;
-  styleCell(R.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT });
-  R.getCell(4).value = rep.total;
+  R.getCell(1).value = `합계 · 은행 ${rep.bankCount}건 / 직접 ${rep.manualCount}건`;
+  styleCell(R.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(4).value = rep.totalDue;
+  styleCell(R.getCell(5), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(5).value = rep.total;
+  styleCell(R.getCell(6), { fill: C.beige });
+  r++;
+
+  // 보증금 내역
+  if ((rep.deposits || []).length) {
+    r++;
+    ws.mergeCells(r, 1, r, 6); ws.getRow(r).height = 26;
+    styleCell(ws.getCell(r, 1), { fill: C.navy, font: { size: 13, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: 'center' } });
+    ws.getCell(r, 1).value = '보증금 내역'; r++;
+    const hr = ws.getRow(r); hr.height = 22;
+    ['날짜', '구분', '', '금액', '비고', ''].forEach((h, i) => { styleCell(hr.getCell(i + 1), { fill: C.teal, font: { size: 11, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: i === 3 ? 'right' : 'left' } }); hr.getCell(i + 1).value = h; });
+    ws.mergeCells(r, 2, r, 3); ws.mergeCells(r, 5, r, 6); r++;
+    let held = 0;
+    rep.deposits.forEach((d, idx) => {
+      const DR = ws.getRow(r); DR.height = 20; const z = idx % 2 === 0 ? C.white : C.zebra;
+      const isIn = /받음/.test(d.type); held += isIn ? d.amount : -d.amount;
+      styleCell(DR.getCell(1), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); DR.getCell(1).value = d.date;
+      styleCell(DR.getCell(2), { fill: z, font: { size: 11, bold: true, color: { argb: argb(isIn ? C.teal : C.bad) } }, align: { horizontal: 'left' } }); DR.getCell(2).value = d.type; ws.mergeCells(r, 2, r, 3); styleCell(DR.getCell(3), { fill: z });
+      styleCell(DR.getCell(4), { fill: z, font: { size: 11, bold: true, color: { argb: argb(isIn ? C.ink : C.bad) } }, align: { horizontal: 'right' }, numFmt: FMT }); DR.getCell(4).value = isIn ? d.amount : -d.amount;
+      styleCell(DR.getCell(5), { fill: z, font: { size: 10, color: { argb: argb(C.gray) } }, align: { horizontal: 'left' } }); DR.getCell(5).value = d.memo || ''; ws.mergeCells(r, 5, r, 6); styleCell(DR.getCell(6), { fill: z });
+      r++;
+    });
+    const FR = ws.getRow(r); FR.height = 24; ws.mergeCells(r, 1, r, 3);
+    styleCell(FR.getCell(1), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'left' } }); FR.getCell(1).value = '현재 보관 중';
+    styleCell(FR.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); FR.getCell(4).value = held;
+    ws.mergeCells(r, 5, r, 6); styleCell(FR.getCell(5), { fill: C.beige });
+  }
 
   const buf = await wb.xlsx.writeBuffer();
-  saveExcel(`입금내역_${unitLabel(t.unit)}_${t.name}${opts.bankOnly ? '_은행확인분' : ''}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  saveExcel(`거래내역_${unitLabel(t.unit)}_${t.name}${opts.bankOnly ? '_은행확인분' : ''}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
 }
 
 /* ================= 건물 전체(이번 달) ================= */

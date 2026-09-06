@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { screen } from '../ui/shell.js';
 import * as auth from '../auth/auth.js';
 import { navigate } from '../router.js';
-import { attemptBiometricLogin } from '../auth/autolock.js';
+import { attemptBiometricLogin, consumeReturnRoute } from '../auth/autolock.js';
 
 export async function renderLogin() {
   const hasBio = await auth.hasBiometric();
@@ -14,7 +14,7 @@ export async function renderLogin() {
   const err = h('div', { class: 'banner banner--bad', style: { display: 'none' } }, icon('alert'), h('div', {}, '비밀번호가 맞지 않아요. 다시 입력해 주세요.'));
 
   const doPassword = async () => {
-    if (await auth.verifyPassword(pw.value)) { auth.unlock(); navigate('/', { replace: true }); }
+    if (await auth.verifyPassword(pw.value)) { auth.unlock(); navigate(consumeReturnRoute() || '/', { replace: true }); }
     else { err.style.display = 'flex'; pw.value = ''; pw.focus(); }
   };
   pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doPassword(); });
