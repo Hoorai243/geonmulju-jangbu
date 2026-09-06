@@ -5,7 +5,7 @@ import { screen, topbar, statusChip, banner } from '../ui/shell.js';
 import * as store from '../store.js';
 import { navigate } from '../router.js';
 import { openConfirmForTenant } from './pay-flow.js';
-import { exportTenantExcel, exportTenantImage } from '../export/export.js';
+import { exportTenantExcel, exportTenantImage, exportSummaryExcel, exportSummaryImage } from '../export/export.js';
 import { requireAuth } from '../ui/authgate.js';
 import { coachMark } from '../ui/coach.js';
 
@@ -383,6 +383,9 @@ export async function renderTenantSummary({ params, query = {} }) {
           dt('완납 못한 달'), dd(lateCount + '번')),
         h('hr', { class: 'hr' }),
         h('div', { style: { textAlign: 'center', padding: '4px 0' } }, bigResult)),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '엑셀'),
+        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '이미지')),
       rows.length === 0
         ? banner('info', { text: '아직 셈할 내역이 없어요.' })
         : h('div', { class: 'card', style: { overflowX: 'auto' } },

@@ -418,3 +418,104 @@ export async function exportBuildingExcel(buildingId, month = monthKey()) {
   download(`납부현황_${rep.building?.name || '건물'}_${month}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   toast('엑셀 파일을 내려받았어요', 'ok');
 }
+
+/* ================= 납부 요약(전체 정산) 내보내기 ================= */
+const ST_LABEL = { ok: '완납', part: '부분', bad: '미납', idle: '미확인' };
+async function summaryReport(t, { from = '', to = '' } = {}) {
+  const upto = (t.status === 'movedout' && t.movedOutAt) ? monthKey(new Date(t.movedOutAt)) : monthKey();
+  const { map } = await store.tenantLedger(t, upto);
+  const all = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
+  const months = all.filter((m) => (!from || m >= from) && (!to || m <= to));
+  let totalDue = 0, totalPaid = 0, lateCount = 0, running = 0; const rows = [];
+  for (const m of months) { const s = map.get(m); totalDue += s.due; totalPaid += s.paid; if (s.due > 0 && s.state !== 'ok') lateCount++; running += s.paid - s.due; rows.push({ m, due: s.due, paid: s.paid, state: s.state, running }); }
+  const filtered = !!(from || to);
+  return { t, rows, totalDue, totalPaid, diff: totalPaid - totalDue, lateCount, filtered, periodLabel: filtered ? `${from || '처음'}~${to || '지금'}` : '전체기간' };
+}
+const sgn = (n) => (n < 0 ? '-' : n > 0 ? '+' : '') + won(Math.abs(n)) + '원';
+
+export async function exportSummaryImage(t, opts = {}) {
+  const rep = await summaryReport(t, opts);
+  const W = 1040, mx = 60, CW = W - mx * 2;
+  const rowH = 50, headerH = 60, titleH = 110, sumH = 150, footH = 60, top = 56;
+  const H = top + titleH + sumH + headerH + rep.rows.length * rowH + footH + 60;
+  const { cv, ctx } = makeCanvas(W, H);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const cols = [{ w: 18, align: 'center' }, { w: 27, align: 'right' }, { w: 27, align: 'right' }, { w: 28, align: 'right' }];
+  const labels = ['월', '청구', '받음', '누적'];
+  const xs = []; let cx = mx; cols.forEach((c) => { xs.push(cx); cx += CW * c.w / 100; });
+  const colX = (i) => xs[i], colW = (i) => CW * cols[i].w / 100;
+
+  let y = top;
+  ctx.fillStyle = hx(C.navy); ctx.fillRect(mx, y, CW, titleH);
+  cell(ctx, `${unitLabel(t.unit)} ${t.name} — 납부 요약`, mx, y, CW, titleH - 34, { align: 'center', color: C.white, font: FONT('800 34px') });
+  cell(ctx, rep.periodLabel, mx, y + titleH - 44, CW, 34, { align: 'center', color: C.mint, font: FONT('600 22px') });
+  y += titleH;
+  ctx.fillStyle = hx(C.beige); ctx.fillRect(mx, y, CW, sumH);
+  const stats = [['청구', won(rep.totalDue) + '원', C.ink], ['받음', won(rep.totalPaid) + '원', C.teal], [rep.diff < 0 ? '밀린 돈' : rep.diff > 0 ? '미리 낸 돈' : '차액', won(Math.abs(rep.diff)) + '원', rep.diff < 0 ? C.bad : C.teal]];
+  const bw = CW / 3;
+  stats.forEach((s, i) => {
+    cell(ctx, s[0], mx + bw * i, y + 14, bw, 40, { align: 'center', color: C.gray, font: FONT('700 22px') });
+    cell(ctx, s[1], mx + bw * i, y + 62, bw, 56, { align: 'center', color: s[2], font: FONT('800 34px') });
+  });
+  cell(ctx, `완납 못한 달 ${rep.lateCount}번`, mx, y + sumH - 34, CW, 30, { align: 'center', color: C.gray, font: FONT('600 20px') });
+  y += sumH;
+  ctx.fillStyle = hx(C.teal); ctx.fillRect(mx, y, CW, headerH);
+  labels.forEach((l, i) => cell(ctx, l, colX(i), y, colW(i), headerH, { align: cols[i].align === 'right' ? 'right' : 'center', color: C.white, font: FONT('700 24px') }));
+  const tableTop = y; y += headerH;
+  rep.rows.forEach((row, i) => {
+    ctx.fillStyle = hx(i % 2 === 0 ? C.white : C.zebra); ctx.fillRect(mx, y, CW, rowH);
+    ctx.beginPath(); ctx.arc(colX(0) + 20, y + rowH / 2, 6, 0, Math.PI * 2); ctx.fillStyle = hx(stColor(row.state)); ctx.fill();
+    cell(ctx, row.m, colX(0) + 16, y, colW(0) - 16, rowH, { align: 'center', color: C.ink, font: FONT('600 21px') });
+    cell(ctx, row.due ? won(row.due) : '-', colX(1), y, colW(1), rowH, { align: 'right', color: C.ink });
+    cell(ctx, row.paid ? won(row.paid) : '-', colX(2), y, colW(2), rowH, { align: 'right', color: row.paid > row.due ? C.teal : C.ink, font: row.paid > row.due ? FONT('800 22px') : FONT('600 22px') });
+    cell(ctx, sgn(row.running), colX(3), y, colW(3), rowH, { align: 'right', color: row.running < 0 ? C.bad : row.running > 0 ? C.teal : C.gray });
+    y += rowH;
+  });
+  ctx.strokeStyle = hx(C.line); ctx.lineWidth = 1;
+  for (let i = 1; i < cols.length; i++) { ctx.beginPath(); ctx.moveTo(colX(i) + 0.5, tableTop); ctx.lineTo(colX(i) + 0.5, y); ctx.stroke(); }
+  ctx.strokeRect(mx + 0.5, tableTop + 0.5, CW, y - tableTop);
+  ctx.fillStyle = hx(C.beige); ctx.fillRect(mx, y, CW, footH);
+  cell(ctx, '합계', colX(0), y, colW(0), footH, { align: 'center', color: C.ink, font: FONT('800 24px') });
+  cell(ctx, won(rep.totalDue) + '원', colX(1), y, colW(1), footH, { align: 'right', color: C.ink, font: FONT('800 22px') });
+  cell(ctx, won(rep.totalPaid) + '원', colX(2), y, colW(2), footH, { align: 'right', color: C.ink, font: FONT('800 22px') });
+  cell(ctx, sgn(rep.diff), colX(3), y, colW(3), footH, { align: 'right', color: rep.diff < 0 ? C.bad : C.teal, font: FONT('800 22px') });
+  ctx.strokeStyle = hx(C.teal); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, y + 0.5); ctx.lineTo(mx + CW, y + 0.5); ctx.stroke();
+
+  saveCanvas(cv, `납부요약_${t.name}_${rep.periodLabel}.png`);
+}
+
+export async function exportSummaryExcel(t, opts = {}) {
+  let EJS; try { EJS = await loadExcelJS(); } catch (e) { return toast(e.message, 'bad'); }
+  const rep = await summaryReport(t, opts);
+  const wb = new EJS.Workbook();
+  const ws = wb.addWorksheet('납부요약', { views: [{ showGridLines: false }], pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+  ws.columns = [{ width: 12 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 10 }];
+  const FMT = '#,##0"원"';
+  ws.mergeCells('A1:E1'); ws.getRow(1).height = 40;
+  styleCell(ws.getCell('A1'), { fill: C.navy, font: { size: 16, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: 'center' } });
+  ws.getCell('A1').value = `${unitLabel(t.unit)} ${t.name} — 납부 요약 (${rep.periodLabel})`;
+  ws.mergeCells('A2:E2'); ws.getRow(2).height = 22;
+  styleCell(ws.getCell('A2'), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(rep.diff < 0 ? C.bad : C.teal) } }, align: { horizontal: 'center' } });
+  ws.getCell('A2').value = `청구 ${won(rep.totalDue)}원 · 받음 ${won(rep.totalPaid)}원 · ${rep.diff < 0 ? '밀린 돈 ' + won(-rep.diff) : rep.diff > 0 ? '미리 낸 돈 ' + won(rep.diff) : '딱 맞음'}원 · 완납 못한 달 ${rep.lateCount}번`;
+  ws.getRow(3).height = 24;
+  ['월', '청구', '받음', '누적', '상태'].forEach((h, i) => { const c = ws.getRow(3).getCell(i + 1); styleCell(c, { fill: C.teal, font: { size: 11, bold: true, color: { argb: argb(C.white) } }, align: { horizontal: i >= 1 && i <= 3 ? 'right' : 'center' } }); c.value = h; });
+  let r = 4;
+  rep.rows.forEach((row, idx) => {
+    const R = ws.getRow(r); R.height = 20; const z = idx % 2 === 0 ? C.white : C.zebra;
+    styleCell(R.getCell(1), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); R.getCell(1).value = row.m;
+    styleCell(R.getCell(2), { fill: z, font: { size: 11, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(2).value = row.due || 0;
+    styleCell(R.getCell(3), { fill: z, font: { size: 11, bold: row.paid > row.due, color: { argb: argb(row.paid > row.due ? C.teal : C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(3).value = row.paid || 0;
+    styleCell(R.getCell(4), { fill: z, font: { size: 11, color: { argb: argb(row.running < 0 ? C.bad : row.running > 0 ? C.teal : C.gray) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(4).value = row.running;
+    styleCell(R.getCell(5), { fill: z, font: { size: 11, bold: true, color: { argb: argb(stColor(row.state)) } }, align: { horizontal: 'center' } }); R.getCell(5).value = ST_LABEL[row.state] || '';
+    r++;
+  });
+  const R = ws.getRow(r); R.height = 26;
+  styleCell(R.getCell(1), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'center' } }); R.getCell(1).value = '합계';
+  styleCell(R.getCell(2), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(2).value = rep.totalDue;
+  styleCell(R.getCell(3), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(3).value = rep.totalPaid;
+  styleCell(R.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(rep.diff < 0 ? C.bad : C.teal) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(4).value = rep.diff;
+  styleCell(R.getCell(5), { fill: C.beige }); R.getCell(5).value = '';
+  const buf = await wb.xlsx.writeBuffer();
+  download(`납부요약_${t.name}_${rep.periodLabel}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  toast('엑셀 파일을 내려받았어요', 'ok');
+}
