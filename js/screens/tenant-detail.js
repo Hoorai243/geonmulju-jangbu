@@ -5,7 +5,7 @@ import { screen, topbar, statusChip, banner } from '../ui/shell.js';
 import * as store from '../store.js';
 import { navigate } from '../router.js';
 import { openConfirmForTenant } from './pay-flow.js';
-import { exportTenantExcel, exportTenantImage, exportSummaryExcel, exportSummaryImage } from '../export/export.js';
+import { exportTenantExcel, exportTenantImage, exportSummaryExcel, exportSummaryImage, exportMissedExcel, exportMissedImage } from '../export/export.js';
 import { requireAuth } from '../ui/authgate.js';
 import { coachMark } from '../ui/coach.js';
 
@@ -355,24 +355,41 @@ export async function renderTenantSummary({ params, query = {} }) {
   });
   const diff = totalPaid - totalDue;
 
-  // 만원 단위 압축표시 (가로 스크롤 없이 한 화면에)
-  const man = (n) => { if (!n) return '0'; const neg = n < 0; const v = Math.abs(n) / 10000; const s = (Number.isInteger(v) ? v : Math.round(v * 10) / 10).toLocaleString('ko-KR'); return (neg ? '-' : '') + s; };
   // 월세/관리비 분리 (관리비성 입금 먼저 가려내고 나머지를 월세로) — 선택한 구간
   const split = await store.tenantLedgerSplit(t, { from: query.from, to: query.to });
   const rentDue = split.rentDue, feeDue = split.feeDue, rentPaid = split.rentPaid, feePaid = split.feePaid;
-  const shortCell = (due, paid) => { const sh = due - paid; return h('td', { class: 'num', style: { fontWeight: 700, color: sh > 0 ? 'var(--bad-ink)' : sh < 0 ? 'var(--primary)' : 'var(--ink-3)' } }, sh > 0 ? man(sh) : sh < 0 ? '+' + man(-sh) : '0'); };
-  const splitRow = (label, due, paid) => h('tr', {}, h('td', { style: { fontWeight: 700 } }, label), h('td', { class: 'num' }, man(due)), h('td', { class: 'num' }, man(paid)), shortCell(due, paid));
+  const shortCell = (due, paid) => { const sh = due - paid; return h('td', { class: 'num', style: { fontWeight: 700, color: sh > 0 ? 'var(--bad-ink)' : sh < 0 ? 'var(--primary)' : 'var(--ink-3)' } }, sh > 0 ? won(sh) : sh < 0 ? '+' + won(-sh) : '0'); };
+  const splitRow = (label, due, paid) => h('tr', {}, h('td', { style: { fontWeight: 700 } }, label), h('td', { class: 'num' }, won(due)), h('td', { class: 'num' }, won(paid)), shortCell(due, paid));
+
+  // 빠진 달 조건 (기본: 관리비)
+  const miss = query.miss === 'rent' ? 'rent' : 'fee';
+  const missList = miss === 'rent' ? (split.rentMissed || []) : (split.feeMissed || []);
+  const missTotal = missList.reduce((s, x) => s + x.short, 0);
+  const missLabel = miss === 'rent' ? '월세' : '관리비';
+
+  // URL 만들기 (기간·조건 유지)
+  const curFrom = query.from || '', curTo = query.to || '';
+  const sumUrl = (o = {}) => {
+    const f = 'from' in o ? o.from : curFrom;
+    const tt = 'to' in o ? o.to : curTo;
+    const mi = 'miss' in o ? o.miss : (query.miss || '');
+    const p = new URLSearchParams();
+    if (f) p.set('from', f); if (tt) p.set('to', tt); if (mi) p.set('miss', mi);
+    const s = p.toString();
+    return '/tenant/' + t.id + '/summary' + (s ? '?' + s : '');
+  };
 
   const fromInput = h('input', { class: 'input', type: 'month', value: query.from || '' });
   const toInput = h('input', { class: 'input', type: 'month', value: query.to || '' });
-  const applyRange = () => navigate('/tenant/' + t.id + '/summary' + qstr(fromInput.value, toInput.value));
-  fromInput.onchange = applyRange; toInput.onchange = applyRange;
-  const signWon = (n) => (n < 0 ? '-' : n > 0 ? '+' : '') + won(Math.abs(n)) + '원';
+  fromInput.onchange = () => navigate(sumUrl({ from: fromInput.value }));
+  toInput.onchange = () => navigate(sumUrl({ to: toInput.value }));
   const bigResult = diff < 0
     ? h('strong', { class: 'amount won amount--big', style: { color: 'var(--bad-ink)' } }, '밀린 돈 ' + won(-diff) + '원')
     : diff > 0
       ? h('strong', { class: 'amount won amount--big', style: { color: 'var(--primary)' } }, '미리 낸 돈 ' + won(diff) + '원')
       : h('strong', { class: 'amount won amount--big', style: { color: 'var(--ok-ink)' } }, '딱 맞아요');
+
+  const tabBtn = (label, on, url) => h('button', { class: 'btn ' + (on ? 'btn--primary' : 'btn--ghost'), style: { flex: 1 }, onClick: () => navigate(url) }, label);
 
   return screen({ plain: true },
     topbar({ title: '납부 요약', sub: `${unitLabel(t.unit)} ${t.name}`, back: '/tenant/' + t.id }),
@@ -381,7 +398,7 @@ export async function renderTenantSummary({ params, query = {} }) {
         h('div', { style: { display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' } },
           h('div', { class: 'field', style: { margin: 0, flex: 1, minWidth: '120px' } }, h('label', { class: 'label' }, '시작월'), fromInput),
           h('div', { class: 'field', style: { margin: 0, flex: 1, minWidth: '120px' } }, h('label', { class: 'label' }, '끝월'), toInput)),
-        filtered ? h('button', { class: 'btn btn--ghost', onClick: () => navigate('/tenant/' + t.id + '/summary') }, '전체 기간 보기') : null,
+        filtered ? h('button', { class: 'btn btn--ghost', onClick: () => navigate(sumUrl({ from: '', to: '' })) }, '전체 기간 보기') : null,
         h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)' } }, filtered ? `${from ? formatMonth(from) : '처음'} ~ ${to ? formatMonth(to) : '지금'}만 보는 중` : '전체 기간'),
       ),
       h('div', { class: 'card' },
@@ -392,33 +409,47 @@ export async function renderTenantSummary({ params, query = {} }) {
         h('hr', { class: 'hr' }),
         h('div', { style: { textAlign: 'center', padding: '4px 0' } }, bigResult)),
       h('div', { class: 'card' },
-        h('div', { style: { fontWeight: 700, marginBottom: '8px' } }, '월세 · 관리비 나눠보기 ', h('span', { class: 'muted', style: { fontWeight: 400, fontSize: 'var(--fs-sm)' } }, '(만원)')),
-        h('table', { class: 'table', style: { fontSize: 'var(--fs-sm)', tableLayout: 'fixed', width: '100%' } },
+        h('div', { style: { fontWeight: 700, marginBottom: '8px' } }, '월세 · 관리비 나눠보기'),
+        h('table', { class: 'table', style: { width: '100%' } },
           h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '부족'))),
           h('tbody', {}, splitRow('월세', rentDue, rentPaid), splitRow('관리비', feeDue, feePaid))),
-        (split.feeMissed && split.feeMissed.length)
-          ? h('div', { style: { marginTop: '10px', fontSize: 'var(--fs-sm)', lineHeight: '1.6' } },
-            h('span', { style: { fontWeight: 700, color: 'var(--bad-ink)' } }, '관리비 빠진 달: '),
-            split.feeMissed.map((x) => `${formatMonth(x.month)} ${man(x.short)}만`).join(' · '))
-          : null,
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '6px', lineHeight: '1.5' } }, '입금은 월세부터 채우고 남은 걸 관리비로 봐요. 관리비 낸 건 오래된 달부터 채워요. “부족”은 아직 안 받은 금액(만원).')),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '6px', lineHeight: '1.5' } }, '입금은 월세부터 채우고 남은 걸 관리비로 봐요. “부족”은 아직 안 받은 금액이에요.')),
+      // 빠진 달 자세히 보기 (조건 선택 → 표 + 내보내기)
+      h('div', { class: 'card' },
+        h('div', { style: { fontWeight: 700, marginBottom: '10px' } }, '빠진 달 자세히 보기'),
+        h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
+          tabBtn('관리비 빠진 달', miss === 'fee', sumUrl({ miss: 'fee' })),
+          tabBtn('월세 빠진 달', miss === 'rent', sumUrl({ miss: 'rent' }))),
+        missList.length
+          ? h('table', { class: 'table', style: { width: '100%' } },
+            h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '부족'))),
+            h('tbody', {}, ...missList.map((x) => h('tr', {},
+              h('td', {}, formatMonth(x.month)),
+              h('td', { class: 'num', style: { fontWeight: 700, color: 'var(--bad-ink)' } }, won(x.short) + '원')))),
+            h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
+              h('td', {}, `${missLabel} 부족 합계`), h('td', { class: 'num', style: { color: 'var(--bad-ink)' } }, won(missTotal) + '원'))))
+          : banner('info', { text: `이 기간엔 ${missLabel} 빠진 달이 없어요.` }),
+        h('div', { class: 'btn-row', style: { marginTop: '12px' } },
+          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedExcel(t, { from: query.from, to: query.to, miss }) }, icon('download'), '엑셀'),
+          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedImage(t, { from: query.from, to: query.to, miss }) }, icon('image'), '이미지'))),
       h('div', { class: 'btn-row' },
-        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '엑셀'),
-        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '이미지')),
+        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),
+        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '전체 이미지')),
       rows.length === 0
         ? banner('info', { text: '아직 셈할 내역이 없어요.' })
         : h('div', { class: 'card' },
-          h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, '달별 ', h('span', { class: 'muted', style: { fontWeight: 400, fontSize: 'var(--fs-sm)' } }, '(만원)')),
-          h('table', { class: 'table', style: { fontSize: 'var(--fs-sm)', tableLayout: 'fixed', width: '100%' } },
-            h('thead', {}, h('tr', {}, h('th', { style: { width: '30%' } }, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '누적'))),
-            h('tbody', {}, ...rows.map(({ m, s, running }) => h('tr', {},
-              h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2)),
-              h('td', { class: 'num' }, s.due ? man(s.due) : '-'),
-              h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? man(s.paid) : '-'),
-              h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + man(running))))),
-            h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
-              h('td', {}, '합계'), h('td', { class: 'num' }, man(totalDue)), h('td', { class: 'num' }, man(totalPaid)), h('td', { class: 'num' }, (diff > 0 ? '+' : '') + man(diff)))))),
-      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '금액은 만원 단위예요(176 = 176만원). “누적”은 그 달까지 합쳐 밀렸는지(−)·미리 냈는지(+). 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
+          h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, '달별'),
+          h('div', { style: { overflowX: 'auto' } },
+            h('table', { class: 'table', style: { width: '100%' } },
+              h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '누적'))),
+              h('tbody', {}, ...rows.map(({ m, s, running }) => h('tr', {},
+                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2)),
+                h('td', { class: 'num' }, s.due ? won(s.due) : '-'),
+                h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? won(s.paid) : '-'),
+                h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + won(running))))),
+              h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
+                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num' }, (diff > 0 ? '+' : '') + won(diff))))))),
+      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“누적”은 그 달까지 합쳐 밀렸는지(−)·미리 냈는지(+)를 나타내요. 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
       h('div', { style: { height: '12px' } }),
     ),
   );

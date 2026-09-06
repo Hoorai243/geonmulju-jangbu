@@ -53,6 +53,36 @@ export async function saveFile(filename, blob) {
   }
 }
 
+// saveMedia(파일이름, Blob, kind) → 앱: 정해진 폴더에 바로 저장
+//   kind 'image' → 사진(갤러리) > 건물주장부 폴더
+//   kind 'excel' → 다운로드 > 건물주장부엑셀 폴더
+//   폴더 없으면 만들고, 있으면 그 안에 그냥 저장. 웹에선 브라우저 다운로드로 대체.
+export async function saveMedia(filename, blob, kind) {
+  const mime = kind === 'image' ? 'image/png' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (!isNative()) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('파일을 내려받았어요', 'ok');
+    return { ok: true };
+  }
+  const c = cap();
+  const MediaSaver = c.Plugins && c.Plugins.MediaSaver;
+  // 폴더 저장 플러그인이 없으면(구버전 앱) 기존 공유창 방식으로 대체
+  if (!MediaSaver) return saveFile(filename, blob);
+  try {
+    const base64 = await blobToBase64(blob);
+    const res = await MediaSaver.save({ data: base64, filename, mime, kind });
+    toast(kind === 'image' ? '사진 > 건물주장부 폴더에 저장했어요.' : '다운로드 > 건물주장부엑셀 폴더에 저장했어요.', 'ok');
+    return { ok: true, uri: res && res.uri };
+  } catch (e) {
+    console.warn('폴더 저장 실패, 공유창으로 대체', e);
+    return saveFile(filename, blob);
+  }
+}
+
 // 전체 백업 — 비밀번호로 잠근(암호화) 파일로 저장 + 마지막 백업 날짜 기록
 export async function backupNow() {
   const pw = h('input', { class: 'input', type: 'password', inputmode: 'numeric', placeholder: '백업에 걸 비밀번호', autocomplete: 'new-password' });

@@ -396,7 +396,15 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
     if (fee > 0) { const cov = Math.min(pool, fee); pool -= cov; if (fee - cov > 0) feeMissed.push({ month: mm, short: fee - cov }); }
     mm = addMonths(mm, 1);
   }
-  return { rentDue, feeDue, rentPaid, feePaid, feeMissed };
+  // 월세를 어느 달에 빼먹었는지: 월세성 입금(other)을 월세 부과된 달에 오래된 순으로 채우고, 남은 달을 미납으로.
+  let rpool = other, rn = rangeStart, g3 = 0;
+  const rentMissed = [];
+  while (rangeStart && compareMonth(rn, rangeEnd) <= 0 && g3++ < 800) {
+    const rent = ratesForMonth(tenant, rn).rent || 0;
+    if (rent > 0) { const cov = Math.min(rpool, rent); rpool -= cov; if (rent - cov > 0) rentMissed.push({ month: rn, short: rent - cov }); }
+    rn = addMonths(rn, 1);
+  }
+  return { rentDue, feeDue, rentPaid, feePaid, feeMissed, rentMissed };
 }
 
 // upto까지 밀린 횟수(선납 이월 반영). 완납 못한 달 수.
