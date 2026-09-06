@@ -10,7 +10,7 @@ import { saveFile, saveMedia } from './save-file.js';
 const C = {
   navy: '18364D', teal: '11877A', ink: '26343C', gray: '7A858A',
   beige: 'F5F0E7', zebra: 'EDF5F3', mint: 'DCEFEA', line: 'D7DEDE', white: 'FFFFFF',
-  ok: '11877A', bad: 'C0392B', warn: 'B8860B', idle: '7A858A',
+  ok: '11877A', bad: 'C0392B', warn: 'B8860B', idle: '7A858A', blue: '1D6FE0',
 };
 const hx = (h) => '#' + h;
 const argb = (h) => 'FF' + h;
@@ -46,7 +46,9 @@ function loadExcelJS() {
 const srcTag = (p) => (p.source === 'bank' ? ' (은행)' : ' (직접)');
 
 async function tenantReport(t, { bankOnly = false } = {}) {
-  const start = t.rentHistory?.[0]?.from || t.contractStart;
+  const base = t.rentHistory?.[0]?.from || t.contractStart;
+  // 장부 시작월(trackStart)이 있으면 그 달부터 — 요약/원장과 같은 범위로 맞춰 초과/부족이 어긋나지 않게
+  const start = (t.trackStart && base && compareMonth(t.trackStart, base) > 0) ? t.trackStart : base;
   const end = (t.status === 'movedout' && t.movedOutAt) ? monthKey(new Date(t.movedOutAt)) : monthKey();
   const allPays = await store.getAllPaymentsForTenant(t.id);
   let bankCount = 0, manualCount = 0;
@@ -189,6 +191,8 @@ export async function exportTenantImage(t, opts = {}) {
   cell(ctx, '합계', mx, y, colW(0) + colW(1) + colW(2), footH, { align: 'left', color: C.ink, font: FONT('800 25px') });
   cell(ctx, won(rep.totalDue) + '원', colX(3), y, colW(3), footH, { align: 'right', color: C.ink, font: FONT('800 23px') });
   cell(ctx, won(rep.total) + '원', colX(4), y, colW(4), footH, { align: 'right', color: C.ink, font: FONT('800 23px') });
+  { const d = rep.total - rep.totalDue; // 초과(파랑)/부족(빨강)
+    cell(ctx, d > 0 ? '초과 ' + won(d) + '원' : d < 0 ? '부족 ' + won(-d) + '원' : '딱 맞음', colX(5), y, colW(5), footH, { align: 'left', color: d > 0 ? C.blue : d < 0 ? C.bad : C.teal, font: FONT('800 19px'), pad: 10 }); }
   ctx.strokeStyle = hx(C.teal); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, y + 0.5); ctx.lineTo(mx + CW, y + 0.5); ctx.stroke();
   y += footH;
 
@@ -312,7 +316,9 @@ export async function exportTenantExcel(t, opts = {}) {
   R.getCell(1).value = `합계 · 은행 ${rep.bankCount}건 / 직접 ${rep.manualCount}건`;
   styleCell(R.getCell(4), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(4).value = rep.totalDue;
   styleCell(R.getCell(5), { fill: C.beige, font: { size: 12, bold: true, color: { argb: argb(C.ink) } }, align: { horizontal: 'right' }, numFmt: FMT }); R.getCell(5).value = rep.total;
-  styleCell(R.getCell(6), { fill: C.beige });
+  { const d = rep.total - rep.totalDue; // 초과(파랑)/부족(빨강)
+    styleCell(R.getCell(6), { fill: C.beige, font: { size: 11, bold: true, color: { argb: argb(d > 0 ? C.blue : d < 0 ? C.bad : C.teal) } }, align: { horizontal: 'left' } });
+    R.getCell(6).value = d > 0 ? '초과 ' + won(d) + '원' : d < 0 ? '부족 ' + won(-d) + '원' : '딱 맞음'; }
   r++;
 
   // 보증금 내역
