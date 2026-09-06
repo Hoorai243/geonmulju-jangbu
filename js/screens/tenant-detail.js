@@ -361,17 +361,6 @@ export async function renderTenantSummary({ params, query = {} }) {
   const shortCell = (due, paid) => { const sh = due - paid; return h('td', { class: 'num', style: { fontWeight: 700, color: sh > 0 ? 'var(--bad-ink)' : sh < 0 ? 'var(--primary)' : 'var(--ink-3)' } }, sh > 0 ? won(sh) : sh < 0 ? '+' + won(-sh) : '0'); };
   const splitRow = (label, due, paid) => h('tr', {}, h('td', { style: { fontWeight: 700 } }, label), h('td', { class: 'num' }, won(due)), h('td', { class: 'num' }, won(paid)), shortCell(due, paid));
 
-  // 달별 표에 색으로 표시할 "빠진 달"(월 → 부족액)
-  const feeMissMap = new Map((split.feeMissed || []).map((x) => [x.month, x.short]));
-  const rentMissMap = new Map((split.rentMissed || []).map((x) => [x.month, x.short]));
-  const badge = (text, bg, fg) => h('span', { style: { display: 'inline-block', fontSize: '11px', fontWeight: 700, padding: '1px 6px', borderRadius: '5px', marginLeft: '5px', background: bg, color: fg, verticalAlign: 'middle' } }, text);
-  const missChips = (m) => {
-    const out = [];
-    if (rentMissMap.has(m)) out.push(badge('월세', '#fbe3e3', '#b3261e'));
-    if (feeMissMap.has(m)) out.push(badge('관리비', '#f7edcf', '#8a6a12'));
-    return out;
-  };
-
   // 빠진 달 조건 (기본: 관리비)
   const miss = query.miss === 'rent' ? 'rent' : 'fee';
   const missList = miss === 'rent' ? (split.rentMissed || []) : (split.feeMissed || []);
@@ -426,6 +415,14 @@ export async function renderTenantSummary({ params, query = {} }) {
             h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '부족'))),
             h('tbody', {}, splitRow('월세', rentDue, rentPaid), splitRow('관리비', feeDue, feePaid)))),
         (() => {
+          const missLine = (label, list, color) => (list && list.length)
+            ? h('div', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.6' } },
+              h('span', { style: { fontWeight: 700, color } }, `${label} 덜 받은 달: `),
+              list.map((x) => `${formatMonth(x.month)} ${won(x.short)}원`).join(' · '))
+            : null;
+          return h('div', {}, missLine('월세', split.rentMissed, 'var(--bad-ink)'), missLine('관리비', split.feeMissed, '#8a6a12'));
+        })(),
+        (() => {
           const li = (...kids) => h('div', { style: { display: 'flex', gap: '7px', marginBottom: '5px' } },
             h('span', { style: { color: 'var(--primary)', fontWeight: 800, flex: 'none' } }, '•'),
             h('div', { style: { flex: 1 } }, ...kids));
@@ -445,16 +442,13 @@ export async function renderTenantSummary({ params, query = {} }) {
             h('table', { class: 'table', style: { width: '100%', minWidth: '420px' } },
               h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '차이'), h('th', { class: 'num' }, '누적'))),
               h('tbody', {}, ...rows.map(({ m, s, running }) => { const d = s.paid - s.due; return h('tr', {},
-                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2), ...missChips(m)),
+                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2)),
                 h('td', { class: 'num' }, s.due ? won(s.due) : '-'),
                 h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? won(s.paid) : '-'),
                 h('td', { class: 'num', style: { fontWeight: 700, color: d < 0 ? 'var(--bad-ink)' : d > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, d === 0 ? '0' : (d > 0 ? '+' : '') + won(d)),
                 h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + won(running))); })),
               h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
-                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff)))))),
-          h('div', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.6' } },
-            badge('월세', '#fbe3e3', '#b3261e'), ' 그 달 월세를 덜 받음   ',
-            badge('관리비', '#f7edcf', '#8a6a12'), ' 그 달 관리비를 덜 받음')),
+                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff))))))),
       h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“차이”는 그 달 하나만 본 것(받음−청구), “누적”은 그 달까지 합친 것이에요. −는 밀림, +는 미리 냄. 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),

@@ -422,10 +422,10 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
     rows.push({ month: m, rentRem, feeRem, rentExtra: rentExtra + pool, feeExtra });
     m = addMonths(m, 1);
   }
-  // 넘친 몫을 오래된 미납부터 이월
+  // 넘친 몫을 오래된 미납부터 이월. 월세 남은 것 먼저 메꾸고, 그래도 남은 월세 초과분은 관리비로 넘긴다.
   let rentPool = rows.reduce((s, r) => s + r.rentExtra, 0);
   for (const r of rows) { if (rentPool <= 0) break; if (r.rentRem > 0) { const c = Math.min(rentPool, r.rentRem); r.rentRem -= c; rentPool -= c; } }
-  let feePool = rows.reduce((s, r) => s + r.feeExtra, 0);
+  let feePool = rows.reduce((s, r) => s + r.feeExtra, 0) + rentPool; // 월세보다 많이 낸 몫 → 관리비로
   for (const r of rows) { if (feePool <= 0) break; if (r.feeRem > 0) { const c = Math.min(feePool, r.feeRem); r.feeRem -= c; feePool -= c; } }
 
   const rentMissed = rows.filter((r) => r.rentRem > 0).map((r) => ({ month: r.month, short: r.rentRem }));
