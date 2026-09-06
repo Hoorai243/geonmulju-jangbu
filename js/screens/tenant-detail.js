@@ -450,18 +450,6 @@ export async function renderTenantSummary({ params, query = {} }) {
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '전체 이미지')),
-      // 빠진 달만 따로 골라 내보내기 (맨 아래)
-      h('div', { class: 'card' },
-        h('div', { style: { fontWeight: 700, marginBottom: '4px' } }, '빠진 달만 골라 내보내기'),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '10px' } }, '고른 항목만 담긴 표를 엑셀·이미지로 저장해요.'),
-        h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
-          tabBtn('관리비', miss === 'fee', sumUrl({ miss: 'fee' })),
-          tabBtn('월세', miss === 'rent', sumUrl({ miss: 'rent' }))),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '10px' } },
-          missList.length ? `${missLabel} 빠진 달 ${missList.length}개 · 합 ${won(missTotal)}원` : `이 기간엔 ${missLabel} 빠진 달이 없어요.`),
-        h('div', { class: 'btn-row' },
-          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedExcel(t, { from: query.from, to: query.to, miss }) }, icon('download'), '엑셀'),
-          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedImage(t, { from: query.from, to: query.to, miss }) }, icon('image'), '이미지'))),
       h('div', { style: { height: '12px' } }),
     ),
   );

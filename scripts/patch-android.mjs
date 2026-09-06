@@ -74,7 +74,9 @@ public class MediaSaver extends Plugin {
         catch (Exception e) { call.reject("bad base64: " + e.getMessage()); return; }
 
         boolean isImage = "image".equals(kind);
-        String subDir = isImage ? "건물주장부" : "건물주장부엑셀";
+        boolean isBackup = "backup".equals(kind);
+        // 사진>건물주장부 / 다운로드>건물주장부엑셀 / 백업은 다운로드 폴더 바로
+        String subDir = isImage ? "건물주장부" : (isBackup ? "" : "건물주장부엑셀");
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -87,7 +89,8 @@ public class MediaSaver extends Plugin {
                     values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + subDir);
                     collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
                 } else {
-                    values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + subDir);
+                    String rel = subDir.isEmpty() ? Environment.DIRECTORY_DOWNLOADS : (Environment.DIRECTORY_DOWNLOADS + "/" + subDir);
+                    values.put(MediaStore.MediaColumns.RELATIVE_PATH, rel);
                     collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
                 }
                 Uri item = resolver.insert(collection, values);

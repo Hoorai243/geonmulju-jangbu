@@ -75,7 +75,12 @@ function confirmSave(kind, filename) {
 //   kind 'excel' → 다운로드 > 건물주장부엑셀 폴더
 //   폴더 없으면 만들고, 있으면 그 안에 그냥 저장. 웹에선 브라우저 다운로드로 대체.
 export async function saveMedia(filename, blob, kind) {
-  const mime = kind === 'image' ? 'image/png' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const mime = kind === 'image' ? 'image/png'
+    : kind === 'backup' ? 'application/json'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const okMsg = kind === 'image' ? '사진 > 건물주장부 폴더에 저장했어요.'
+    : kind === 'backup' ? '다운로드 폴더에 백업을 저장했어요.'
+      : '다운로드 > 건물주장부엑셀 폴더에 저장했어요.';
   if (!isNative()) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -89,12 +94,12 @@ export async function saveMedia(filename, blob, kind) {
   const MediaSaver = c.Plugins && c.Plugins.MediaSaver;
   // 폴더 저장 플러그인이 없으면(구버전 앱) 기존 공유창 방식으로 대체
   if (!MediaSaver) return saveFile(filename, blob);
-  // 한 번 확인 (바로 저장돼서 놀라지 않게)
-  if (!(await confirmSave(kind, filename))) return { ok: false, cancelled: true };
+  // 이미지·엑셀은 한 번 확인 (바로 저장돼서 놀라지 않게). 백업은 앞에서 비밀번호로 이미 확인함.
+  if (kind !== 'backup' && !(await confirmSave(kind, filename))) return { ok: false, cancelled: true };
   try {
     const base64 = await blobToBase64(blob);
     const res = await MediaSaver.save({ data: base64, filename, mime, kind });
-    toast(kind === 'image' ? '사진 > 건물주장부 폴더에 저장했어요.' : '다운로드 > 건물주장부엑셀 폴더에 저장했어요.', 'ok');
+    toast(okMsg, 'ok');
     return { ok: true, uri: res && res.uri };
   } catch (e) {
     console.warn('폴더 저장 실패, 공유창으로 대체', e);
@@ -117,7 +122,7 @@ export async function backupNow() {
       try {
         const enc = await auth.encryptBackup(p, await db.exportAll());
         const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
-        const r = await saveFile(`건물주장부_백업_${monthKey()}.json`, blob);
+        const r = await saveMedia(`건물주장부_백업_${monthKey()}.json`, blob, 'backup');
         if (r.ok) await db.metaSet('lastBackupAt', new Date().toISOString());
         ctrl.close(); resolve(r);
       } catch (e) { console.warn('백업 실패', e); toast('백업에 실패했어요.', 'bad'); }
