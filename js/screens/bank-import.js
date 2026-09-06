@@ -102,8 +102,10 @@ export async function renderBankImport() {
       let n = 0;
       for (const g of groups) for (const t of g.live) { const tid = effTid(g, t); if (tid && tid !== 'ignore') n++; }
       for (const g of groups) if (g._refresh) g._refresh();
-      clear(saveBtn).append(icon('check'), document.createTextNode(` 선택한 입금 ${n}건 저장`));
-      saveBtn.disabled = n === 0;
+      // 저장할 입금이 없어도, '제외'만 정해도 저장(제외 규칙 기억)할 수 있게 한다.
+      const hasIgnore = groups.some((g) => g.decision === 'ignore');
+      clear(saveBtn).append(icon('check'), document.createTextNode(n > 0 ? ` 선택한 입금 ${n}건 저장` : '제외 항목 저장하고 닫기'));
+      saveBtn.disabled = n === 0 && !hasIgnore;
     };
     saveBtn.onclick = async () => {
       // 저장 계획 + "수기 교체" 후보 찾기.
@@ -149,7 +151,7 @@ export async function renderBankImport() {
           saved++;
         }
         await store.saveMatchRules(buildingId, rules2);
-        toast(replaced ? `${saved}건 저장 (직접 입력 ${replaced}건을 은행 확인으로 바꿈)` : `${saved}건을 저장했어요`, 'ok');
+        toast(saved === 0 ? '제외 항목을 저장했어요' : replaced ? `${saved}건 저장 (직접 입력 ${replaced}건을 은행 확인으로 바꿈)` : `${saved}건을 저장했어요`, 'ok');
         navigate('/');
       };
 
