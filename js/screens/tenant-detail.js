@@ -428,12 +428,18 @@ export async function renderTenantSummary({ params, query = {} }) {
             h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '부족'))),
             h('tbody', {}, splitRow('월세', rentDue, rentPaid), splitRow('관리비', feeDue, feePaid)))),
         (() => {
-          const missLine = (label, list, color) => (list && list.length)
-            ? h('div', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.6' } },
-              h('span', { style: { fontWeight: 700, color } }, `${label} 덜 받은 달: `),
-              list.map((x) => `${formatMonth(x.month)} ${won(x.short)}원`).join(' · '))
+          const missTable = (label, list, color) => (list && list.length)
+            ? h('div', { style: { marginTop: '10px' } },
+              h('div', { style: { fontWeight: 700, color, fontSize: 'var(--fs-sm)', marginBottom: '4px' } }, `${label} 덜 받은 달`),
+              h('table', { class: 'table', style: { width: '100%', fontSize: 'var(--fs-sm)' } },
+                h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '부족'))),
+                h('tbody', {}, ...list.map((x) => h('tr', {},
+                  h('td', {}, formatMonth(x.month)),
+                  h('td', { class: 'num', style: { fontWeight: 700, color } }, won(x.short) + '원'))),
+                h('tr', { style: { borderTop: '1px solid var(--line-strong)', fontWeight: 800 } },
+                  h('td', {}, '합계'), h('td', { class: 'num', style: { color } }, won(list.reduce((s, x) => s + x.short, 0)) + '원')))))
             : null;
-          return h('div', {}, missLine('월세', split.rentMissed, 'var(--bad-ink)'), missLine('관리비', split.feeMissed, '#8a6a12'));
+          return h('div', {}, missTable('월세', split.rentMissed, 'var(--bad-ink)'), missTable('관리비', split.feeMissed, '#8a6a12'));
         })(),
         (() => {
           const li = (...kids) => h('div', { style: { display: 'flex', gap: '7px', marginBottom: '5px' } },
