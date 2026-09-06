@@ -359,6 +359,46 @@ export async function tenantLedger(tenant, upto = monthKey()) {
   return { map, net, credit };
 }
 
+// 월세/관리비 분리 정산 (선택 구간). 관리비성 입금(수도/전기/관리비 이름·수기 관리비·그달 관리비 이하 소액)을
+// 먼저 관리비로 가려내고, 나머지를 월세로 본다. 월세를 넘게 낸 몫(합쳐 낸 관리비 포함분)은 관리비로 넘겨준다.
+// (관리비 = 관리비 + 수도세). from/to 없으면 전체 기간.
+export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = monthKey() } = {}) {
+  const base = tenant.rentHistory?.[0]?.from || tenant.contractStart;
+  const startBase = (tenant.trackStart && base && compareMonth(tenant.trackStart, base) > 0) ? tenant.trackStart : base;
+  const moved = tenant.status === 'movedout' && tenant.movedOutAt ? monthKey(new Date(tenant.movedOutAt)) : null;
+  const endCap = moved && compareMonth(moved, upto) < 0 ? moved : upto;
+  const rangeStart = (from && compareMonth(from, startBase) > 0) ? from : startBase;
+  const rangeEnd = (to && compareMonth(to, endCap) < 0) ? to : endCap;
+  // 청구 합계
+  let rentDue = 0, feeDue = 0, m = rangeStart, guard = 0;
+  while (rangeStart && compareMonth(m, rangeEnd) <= 0 && guard++ < 800) {
+    const r = ratesForMonth(tenant, m);
+    rentDue += r.rent; feeDue += (r.fee || 0) + (r.water || 0);
+    m = addMonths(m, 1);
+  }
+  // 입금 분류
+  const pays = (await getAllPaymentsForTenant(tenant.id)).filter((p) => compareMonth(p.month, rangeStart) >= 0 && compareMonth(p.month, rangeEnd) <= 0);
+  let feeDirect = 0, other = 0;
+  for (const p of pays) {
+    const r = ratesForMonth(tenant, p.month);
+    const fee = (r.fee || 0) + (r.water || 0);
+    const isFee = (p.source === 'manual' && /관리비/.test(p.note || '')) || /수도|전기|관리/.test(p.depositorName || '') || (fee > 0 && p.amount <= fee * 1.2);
+    if (isFee) feeDirect += p.amount; else other += p.amount;
+  }
+  const rentPaid = Math.min(rentDue, other);
+  const rentOver = Math.max(0, other - rentDue);   // 월세 넘게 낸 몫(합쳐 낸 관리비 포함) → 관리비로
+  const feePaid = feeDirect + rentOver;
+  // 관리비를 어느 달에 빼먹었는지: 낸 관리비를 관리비 부과된 달에 오래된 순으로 채우고, 남은 달을 미납으로.
+  let pool = feePaid, mm = rangeStart, g2 = 0;
+  const feeMissed = [];
+  while (rangeStart && compareMonth(mm, rangeEnd) <= 0 && g2++ < 800) {
+    const fee = (() => { const r = ratesForMonth(tenant, mm); return (r.fee || 0) + (r.water || 0); })();
+    if (fee > 0) { const cov = Math.min(pool, fee); pool -= cov; if (fee - cov > 0) feeMissed.push({ month: mm, short: fee - cov }); }
+    mm = addMonths(mm, 1);
+  }
+  return { rentDue, feeDue, rentPaid, feePaid, feeMissed };
+}
+
 // upto까지 밀린 횟수(선납 이월 반영). 완납 못한 달 수.
 export async function lateCountCarry(tenant, upto = monthKey()) {
   const last = addMonths(upto, -1); // 이번 달은 진행 중일 수 있어 제외
