@@ -31,7 +31,9 @@ function scoreTenant(depositor, tenant) {
     if (!c) continue;
     let s;
     if (c === d) s = 1;
-    else if (d.includes(c) || c.includes(d)) s = 0.9;      // 상호+이름 함께 입금 등
+    // 한쪽이 다른 쪽을 통째로 포함(상호+이름 함께 입금 등). 단 포함되는 쪽이 3글자 이상일 때만 —
+    // "교회"(2글자)처럼 흔한 말이 "은혜교회"↔"참빛교회"로 잘못 붙는 걸 막는다.
+    else if ((d.includes(c) && c.length >= 3) || (c.includes(d) && d.length >= 3)) s = 0.9;
     else s = ratio(c, d);
     if (s > best) best = s;
   }

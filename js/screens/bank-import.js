@@ -65,7 +65,11 @@ export async function renderBankImport() {
   async function review(txns) {
     if (!tenants.length) { result.appendChild(banner('info', { text: '먼저 세입자를 등록해 주세요.' })); return; }
     const existing = await store.getAllPaymentsForBuilding(buildingId);
-    const isDup = (t) => existing.some((p) => p.paidAt === t.date && p.amount === t.amount && norm(p.depositorName) === norm(t.name));
+    // 보증금으로 옮긴 은행 입금도 '이미 있음'으로 본다(안 그러면 재불러올 때 또 뜸)
+    const bankDeposits = await store.getBankDepositsForBuilding(buildingId);
+    const depName = (l) => { const parts = String(l.memo || '').split('·'); return parts.length > 1 ? norm(parts[parts.length - 1]) : ''; };
+    const isDup = (t) => existing.some((p) => p.paidAt === t.date && p.amount === t.amount && norm(p.depositorName) === norm(t.name))
+      || bankDeposits.some((l) => l.date === t.date && l.amount === t.amount && (!depName(l) || depName(l) === norm(t.name)));
     const rules = await store.getMatchRules(buildingId);
     let acctId = accounts.length === 1 ? accounts[0].id : '';
 
@@ -92,8 +96,12 @@ export async function renderBankImport() {
     const dupTotal = txns.filter((t) => isDup(t)).length;
 
     const saveBtn = h('button', { class: 'btn btn--primary btn--lg' });
+    // 이 입금이 최종적으로 들어갈 세입자(건별 지정 우선, 없으면 그룹 결정)
+    const effTid = (g, t) => (t.assignTo !== undefined && t.assignTo !== '' ? t.assignTo : g.decision);
     const updateSave = () => {
-      let n = 0; for (const g of groups) if (g.decision && g.decision !== 'ignore') n += g.live.length;
+      let n = 0;
+      for (const g of groups) for (const t of g.live) { const tid = effTid(g, t); if (tid && tid !== 'ignore') n++; }
+      for (const g of groups) if (g._refresh) g._refresh();
       clear(saveBtn).append(icon('check'), document.createTextNode(` 선택한 입금 ${n}건 저장`));
       saveBtn.disabled = n === 0;
     };
@@ -105,27 +113,30 @@ export async function renderBankImport() {
       const usedManual = new Set();
       const plan = [];
       for (const g of groups) {
-        if (!g.decision || g.decision === 'ignore') continue;
         for (const t of g.live) {
+          const tid = effTid(g, t);
+          if (!tid || tid === 'ignore') continue;
           const month = t.date.slice(0, 7);
           let replaceId = null;
           if (!g.asDeposit) {
-            const m = fresh.find((p) => !usedManual.has(p.id) && p.source !== 'bank' && p.tenantId === g.decision && p.month === month && p.amount === t.amount);
+            const m = fresh.find((p) => !usedManual.has(p.id) && p.source !== 'bank' && p.tenantId === tid && p.month === month && p.amount === t.amount);
             if (m) { replaceId = m.id; usedManual.add(m.id); }
           }
-          plan.push({ t, tenantId: g.decision, asDeposit: g.asDeposit, replaceId });
+          plan.push({ t, tenantId: tid, asDeposit: g.asDeposit, replaceId });
         }
       }
 
       const commit = async (replaceManual) => {
         const rules2 = await store.getMatchRules(buildingId);
         for (const g of groups) {
+          // 같은 이름에 건별로 다른 세입자를 골랐으면(예: "수도세") 그 이름은 자동연결로 기억하지 않음
+          const hasRowOverride = g.live.some((t) => t.assignTo && t.assignTo !== '' && t.assignTo !== 'ignore');
           if (g.decision === 'ignore') { if (!rules2.ignores.includes(g.key)) rules2.ignores.push(g.key); }
           else if (g.decision) {
-            // "다음에도 자동 연결"이 켜져 있을 때만 이름을 기억. 끄면(이번만) 기존 기억도 지움.
-            if (g.remember === false) delete rules2.aliases[g.key];
+            // "다음에도 자동 연결"이 켜져 있을 때만 이름을 기억. 끄면(이번만)·건별지정이면 기존 기억도 지움.
+            if (g.remember === false || hasRowOverride) delete rules2.aliases[g.key];
             else rules2.aliases[g.key] = g.decision;
-          }
+          } else if (hasRowOverride) { delete rules2.aliases[g.key]; }
         }
         let saved = 0, replaced = 0;
         for (const p of plan) {
@@ -175,22 +186,39 @@ export async function renderBankImport() {
       depCb.onchange = () => { g.asDeposit = depCb.checked; };
       const depRow = onlyDup ? null : h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: 'var(--fs-sm)', color: 'var(--ink-2)' } }, depCb, '이 입금은 월세·관리비가 아니라 보증금이에요');
       // 자세히 보기: 이 입금자의 입금들을 날짜·금액 표로(여러 건이면 각각). 이미 저장된 건은 흐리게 표시.
+      // 각 건마다 세입자를 따로 고를 수 있음(예: 여러 사람이 "수도세"로 보낸 경우).
       const hasDup = g.dup.length > 0;
       const allTx = [...g.live.map((x) => ({ t: x, dup: false })), ...g.dup.map((x) => ({ t: x, dup: true }))].sort((a, b) => (a.t.date < b.t.date ? -1 : 1));
+      const rowSelect = (t) => {
+        const s = h('select', { class: 'select', style: { minHeight: '40px', fontSize: 'var(--fs-sm)' } },
+          h('option', { value: '', selected: !t.assignTo }, '그룹과 같게'),
+          h('option', { value: 'ignore', selected: t.assignTo === 'ignore' }, '이 건만 건너뛰기'),
+          ...tenants.map((tn) => h('option', { value: tn.id, selected: t.assignTo === tn.id }, `${unitLabel(tn.unit)} ${tn.name}`)));
+        s.onchange = () => { t.assignTo = s.value; updateSave(); };
+        return s;
+      };
       const details = h('div', { style: { display: 'none', marginTop: '8px', overflowX: 'auto' } },
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '6px' } }, '여러 사람이 같은 이름(예: 수도세)으로 보냈으면, 아래에서 건마다 세입자를 골라요.'),
         h('table', { class: 'table', style: { fontSize: 'var(--fs-sm)' } },
-          h('thead', {}, h('tr', {}, h('th', {}, '입금일'), h('th', { class: 'num' }, '금액'), hasDup ? h('th', {}, '') : null)),
+          h('thead', {}, h('tr', {}, h('th', {}, '입금일'), h('th', { class: 'num' }, '금액'), h('th', {}, '넣을 곳'))),
           h('tbody', {}, ...allTx.map(({ t, dup }) => h('tr', dup ? { style: { opacity: '.5' } } : {},
             h('td', {}, t.date),
             h('td', { class: 'num' }, won(t.amount) + '원'),
-            hasDup ? h('td', { style: { fontSize: '0.85em', color: 'var(--ink-3)' } }, dup ? '이미 있음' : '') : null)))));
+            h('td', {}, dup ? h('span', { style: { fontSize: '0.85em', color: 'var(--ink-3)' } }, '이미 있음') : rowSelect(t)))))));
       const detailBtn = h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', fontSize: 'var(--fs-sm)', marginTop: '6px' } }, `자세히 보기 (${allTx.length}건) ▾`);
       let detailOpen = false;
       detailBtn.onclick = () => { detailOpen = !detailOpen; details.style.display = detailOpen ? 'block' : 'none'; detailBtn.textContent = detailOpen ? '접기 ▴' : `자세히 보기 (${allTx.length}건) ▾`; };
-      const badge = onlyDup ? h('span', { class: 'chip chip--idle' }, '이미 있음')
-        : g.decision && g.decision !== 'ignore' ? h('span', { class: 'chip chip--ok' }, '연결됨')
-          : g.decision === 'ignore' ? h('span', { class: 'chip chip--idle' }, '제외')
-            : h('span', { class: 'chip chip--warn' }, '확인 필요');
+      const badge = h('span', { class: 'chip' }, '');
+      const setBadge = () => {
+        if (onlyDup) { badge.className = 'chip chip--idle'; badge.textContent = '이미 있음'; return; }
+        const assigned = g.live.filter((t) => { const tid = effTid(g, t); return tid && tid !== 'ignore'; }).length;
+        if (assigned === 0 && g.decision === 'ignore') { badge.className = 'chip chip--idle'; badge.textContent = '제외'; }
+        else if (assigned === 0) { badge.className = 'chip chip--warn'; badge.textContent = '확인 필요'; }
+        else if (assigned === g.live.length) { badge.className = 'chip chip--ok'; badge.textContent = '연결됨'; }
+        else { badge.className = 'chip chip--warn'; badge.textContent = `일부 연결 (${assigned}/${g.live.length})`; }
+      };
+      setBadge();
+      g._refresh = setBadge;
       return h('div', { class: 'card', style: onlyDup ? { opacity: '.6' } : {} },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' } },
           h('div', { style: { fontWeight: 700 } }, g.display), badge),

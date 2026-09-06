@@ -273,6 +273,14 @@ export async function getAllPaymentsForBuilding(buildingId) {
   return all.filter((p) => p.buildingId === buildingId);
 }
 
+// 이 건물에서 '은행 입금 → 보증금으로 옮김' 기록들 (은행파일 재불러오기 중복검사용)
+export async function getBankDepositsForBuilding(buildingId) {
+  const tenants = await db.getBy('tenants', 'byBuilding', buildingId);
+  const ids = new Set(tenants.map((t) => t.id));
+  const all = await db.getAll('deposit_ledger');
+  return all.filter((l) => ids.has(l.tenantId) && l.type === 'in' && l.source === 'bank');
+}
+
 // 미확인 입금(세입자에 아직 못 붙인 입금)
 export async function getUnmatched(buildingId) {
   const all = await db.getAll('payment_log');
