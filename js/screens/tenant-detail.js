@@ -361,6 +361,17 @@ export async function renderTenantSummary({ params, query = {} }) {
   const shortCell = (due, paid) => { const sh = due - paid; return h('td', { class: 'num', style: { fontWeight: 700, color: sh > 0 ? 'var(--bad-ink)' : sh < 0 ? 'var(--primary)' : 'var(--ink-3)' } }, sh > 0 ? won(sh) : sh < 0 ? '+' + won(-sh) : '0'); };
   const splitRow = (label, due, paid) => h('tr', {}, h('td', { style: { fontWeight: 700 } }, label), h('td', { class: 'num' }, won(due)), h('td', { class: 'num' }, won(paid)), shortCell(due, paid));
 
+  // 달별 표에 색으로 표시할 "빠진 달"(월 → 부족액)
+  const feeMissMap = new Map((split.feeMissed || []).map((x) => [x.month, x.short]));
+  const rentMissMap = new Map((split.rentMissed || []).map((x) => [x.month, x.short]));
+  const badge = (text, bg, fg) => h('span', { style: { display: 'inline-block', fontSize: '11px', fontWeight: 700, padding: '1px 6px', borderRadius: '5px', marginLeft: '5px', background: bg, color: fg, verticalAlign: 'middle' } }, text);
+  const missChips = (m) => {
+    const out = [];
+    if (rentMissMap.has(m)) out.push(badge('월세', '#fbe3e3', '#b3261e'));
+    if (feeMissMap.has(m)) out.push(badge('관리비', '#f7edcf', '#8a6a12'));
+    return out;
+  };
+
   // 빠진 달 조건 (기본: 관리비)
   const miss = query.miss === 'rent' ? 'rent' : 'fee';
   const missList = miss === 'rent' ? (split.rentMissed || []) : (split.feeMissed || []);
@@ -410,46 +421,46 @@ export async function renderTenantSummary({ params, query = {} }) {
         h('div', { style: { textAlign: 'center', padding: '4px 0' } }, bigResult)),
       h('div', { class: 'card' },
         h('div', { style: { fontWeight: 700, marginBottom: '8px' } }, '월세 · 관리비 나눠보기'),
-        h('table', { class: 'table', style: { width: '100%' } },
-          h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '부족'))),
-          h('tbody', {}, splitRow('월세', rentDue, rentPaid), splitRow('관리비', feeDue, feePaid))),
-        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '6px', lineHeight: '1.5' } }, '입금은 월세부터 채우고 남은 걸 관리비로 봐요. “부족”은 아직 안 받은 금액이에요.')),
-      // 빠진 달 자세히 보기 (조건 선택 → 표 + 내보내기)
-      h('div', { class: 'card' },
-        h('div', { style: { fontWeight: 700, marginBottom: '10px' } }, '빠진 달 자세히 보기'),
-        h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
-          tabBtn('관리비 빠진 달', miss === 'fee', sumUrl({ miss: 'fee' })),
-          tabBtn('월세 빠진 달', miss === 'rent', sumUrl({ miss: 'rent' }))),
-        missList.length
-          ? h('table', { class: 'table', style: { width: '100%' } },
-            h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '부족'))),
-            h('tbody', {}, ...missList.map((x) => h('tr', {},
-              h('td', {}, formatMonth(x.month)),
-              h('td', { class: 'num', style: { fontWeight: 700, color: 'var(--bad-ink)' } }, won(x.short) + '원')))),
-            h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
-              h('td', {}, `${missLabel} 부족 합계`), h('td', { class: 'num', style: { color: 'var(--bad-ink)' } }, won(missTotal) + '원'))))
-          : banner('info', { text: `이 기간엔 ${missLabel} 빠진 달이 없어요.` }),
-        h('div', { class: 'btn-row', style: { marginTop: '12px' } },
-          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedExcel(t, { from: query.from, to: query.to, miss }) }, icon('download'), '엑셀'),
-          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedImage(t, { from: query.from, to: query.to, miss }) }, icon('image'), '이미지'))),
-      h('div', { class: 'btn-row' },
-        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),
-        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '전체 이미지')),
+        h('div', { style: { overflowX: 'auto' } },
+          h('table', { class: 'table', style: { width: '100%', minWidth: '320px' } },
+            h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '부족'))),
+            h('tbody', {}, splitRow('월세', rentDue, rentPaid), splitRow('관리비', feeDue, feePaid)))),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.55' } },
+          h('div', { style: { fontWeight: 700, color: 'var(--ink-2)' } }, '어떻게 나눴나요? (짐작이에요)'),
+          '입금액이 그 달 관리비만큼 작거나, 입금자·메모에 “관리비·수도·전기”가 있으면 관리비로 봐요. 나머지는 월세로 보고, 월세보다 많이 낸 몫은 관리비로 넘겨요. 은행 입금엔 “이건 관리비”라는 표시가 없어서 100% 정확하진 않아요.')),
       rows.length === 0
         ? banner('info', { text: '아직 셈할 내역이 없어요.' })
         : h('div', { class: 'card' },
           h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, '달별'),
           h('div', { style: { overflowX: 'auto' } },
-            h('table', { class: 'table', style: { width: '100%' } },
+            h('table', { class: 'table', style: { width: '100%', minWidth: '340px' } },
               h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '누적'))),
               h('tbody', {}, ...rows.map(({ m, s, running }) => h('tr', {},
-                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2)),
+                h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2), ...missChips(m)),
                 h('td', { class: 'num' }, s.due ? won(s.due) : '-'),
                 h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? won(s.paid) : '-'),
                 h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + won(running))))),
               h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
-                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num' }, (diff > 0 ? '+' : '') + won(diff))))))),
+                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num' }, (diff > 0 ? '+' : '') + won(diff)))))),
+          h('div', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.6' } },
+            badge('월세', '#fbe3e3', '#b3261e'), ' 그 달 월세를 덜 받음   ',
+            badge('관리비', '#f7edcf', '#8a6a12'), ' 그 달 관리비를 덜 받음')),
       h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“누적”은 그 달까지 합쳐 밀렸는지(−)·미리 냈는지(+)를 나타내요. 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),
+        h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '전체 이미지')),
+      // 빠진 달만 따로 골라 내보내기 (맨 아래)
+      h('div', { class: 'card' },
+        h('div', { style: { fontWeight: 700, marginBottom: '4px' } }, '빠진 달만 골라 내보내기'),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '10px' } }, '고른 항목만 담긴 표를 엑셀·이미지로 저장해요.'),
+        h('div', { style: { display: 'flex', gap: '8px', marginBottom: '12px' } },
+          tabBtn('관리비', miss === 'fee', sumUrl({ miss: 'fee' })),
+          tabBtn('월세', miss === 'rent', sumUrl({ miss: 'rent' }))),
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '10px' } },
+          missList.length ? `${missLabel} 빠진 달 ${missList.length}개 · 합 ${won(missTotal)}원` : `이 기간엔 ${missLabel} 빠진 달이 없어요.`),
+        h('div', { class: 'btn-row' },
+          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedExcel(t, { from: query.from, to: query.to, miss }) }, icon('download'), '엑셀'),
+          h('button', { class: 'btn btn--secondary', onClick: () => exportMissedImage(t, { from: query.from, to: query.to, miss }) }, icon('image'), '이미지'))),
       h('div', { style: { height: '12px' } }),
     ),
   );
