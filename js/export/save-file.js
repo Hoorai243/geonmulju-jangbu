@@ -53,6 +53,23 @@ export async function saveFile(filename, blob) {
   }
 }
 
+// 저장 전 확인 시트 (한 번 물어보기). 저장=true, 취소/닫기=false
+function confirmSave(kind, filename) {
+  return new Promise((resolve) => {
+    let ctrl, done = false;
+    const finish = (v) => { if (done) return; done = true; try { if (v) ctrl.close(); } catch (e) { /* noop */ } resolve(v); };
+    ctrl = openSheet({
+      title: kind === 'image' ? '사진으로 저장할까요?' : '엑셀로 저장할까요?',
+      desc: kind === 'image' ? '사진 > 건물주장부 폴더에 저장돼요.' : '다운로드 > 건물주장부엑셀 폴더에 저장돼요.',
+      onClose: () => finish(false),
+      body: (close) => h('div', { class: 'stack' },
+        h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', wordBreak: 'break-all' } }, filename),
+        h('button', { class: 'btn btn--primary btn--lg', onClick: () => finish(true) }, '저장'),
+        h('button', { class: 'btn btn--secondary', onClick: () => close() }, '취소')),
+    });
+  });
+}
+
 // saveMedia(파일이름, Blob, kind) → 앱: 정해진 폴더에 바로 저장
 //   kind 'image' → 사진(갤러리) > 건물주장부 폴더
 //   kind 'excel' → 다운로드 > 건물주장부엑셀 폴더
@@ -72,6 +89,8 @@ export async function saveMedia(filename, blob, kind) {
   const MediaSaver = c.Plugins && c.Plugins.MediaSaver;
   // 폴더 저장 플러그인이 없으면(구버전 앱) 기존 공유창 방식으로 대체
   if (!MediaSaver) return saveFile(filename, blob);
+  // 한 번 확인 (바로 저장돼서 놀라지 않게)
+  if (!(await confirmSave(kind, filename))) return { ok: false, cancelled: true };
   try {
     const base64 = await blobToBase64(blob);
     const res = await MediaSaver.save({ data: base64, filename, mime, kind });

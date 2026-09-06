@@ -433,19 +433,20 @@ export async function renderTenantSummary({ params, query = {} }) {
         : h('div', { class: 'card' },
           h('div', { style: { fontWeight: 700, marginBottom: '6px' } }, '달별'),
           h('div', { style: { overflowX: 'auto' } },
-            h('table', { class: 'table', style: { width: '100%', minWidth: '340px' } },
-              h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '누적'))),
-              h('tbody', {}, ...rows.map(({ m, s, running }) => h('tr', {},
+            h('table', { class: 'table', style: { width: '100%', minWidth: '420px' } },
+              h('thead', {}, h('tr', {}, h('th', {}, '월'), h('th', { class: 'num' }, '청구'), h('th', { class: 'num' }, '받음'), h('th', { class: 'num' }, '차이'), h('th', { class: 'num' }, '누적'))),
+              h('tbody', {}, ...rows.map(({ m, s, running }) => { const d = s.paid - s.due; return h('tr', {},
                 h('td', { style: { whiteSpace: 'nowrap' } }, h('span', { class: 'dot dot--' + statusCls(s.state), style: { display: 'inline-block', width: '9px', height: '9px', marginRight: '5px', verticalAlign: 'middle' } }), m.slice(2), ...missChips(m)),
                 h('td', { class: 'num' }, s.due ? won(s.due) : '-'),
                 h('td', { class: 'num', style: s.paid > s.due ? { fontWeight: 800, color: 'var(--primary)' } : s.paid > 0 ? { fontWeight: 700 } : { color: 'var(--ink-3)' } }, s.paid ? won(s.paid) : '-'),
-                h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + won(running))))),
+                h('td', { class: 'num', style: { fontWeight: 700, color: d < 0 ? 'var(--bad-ink)' : d > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, d === 0 ? '0' : (d > 0 ? '+' : '') + won(d)),
+                h('td', { class: 'num', style: { color: running < 0 ? 'var(--bad-ink)' : running > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (running > 0 ? '+' : '') + won(running))); })),
               h('tfoot', {}, h('tr', { style: { borderTop: '2px solid var(--line-strong)', fontWeight: 800 } },
-                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num' }, (diff > 0 ? '+' : '') + won(diff)))))),
+                h('td', {}, '합계'), h('td', { class: 'num' }, won(totalDue)), h('td', { class: 'num' }, won(totalPaid)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff)), h('td', { class: 'num', style: { color: diff < 0 ? 'var(--bad-ink)' : diff > 0 ? 'var(--primary)' : 'var(--ink-3)' } }, (diff > 0 ? '+' : '') + won(diff)))))),
           h('div', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px', lineHeight: '1.6' } },
             badge('월세', '#fbe3e3', '#b3261e'), ' 그 달 월세를 덜 받음   ',
             badge('관리비', '#f7edcf', '#8a6a12'), ' 그 달 관리비를 덜 받음')),
-      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“누적”은 그 달까지 합쳐 밀렸는지(−)·미리 냈는지(+)를 나타내요. 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
+      h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', padding: '0 4px', lineHeight: '1.6' } }, '“차이”는 그 달 하나만 본 것(받음−청구), “누적”은 그 달까지 합친 것이에요. −는 밀림, +는 미리 냄. 왼쪽 점: 초록 완납·노랑 부분·빨강 미납·회색 미확인.'),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryExcel(t, { from: query.from, to: query.to }) }, icon('download'), '전체 엑셀'),
         h('button', { class: 'btn btn--secondary', onClick: () => exportSummaryImage(t, { from: query.from, to: query.to }) }, icon('image'), '전체 이미지')),
@@ -511,12 +512,21 @@ export async function renderTenantPayments({ params, query }) {
     else confirmSheet({ title: '이 입금을 보증금으로 옮길까요?', desc, confirmText: '보증금으로 옮기기', onConfirm });
   };
 
+  // 이 입금을 월세/관리비/둘다로 직접 정하기 (자동=앱이 짐작)
+  const setKind = async (p, k) => { await store.updatePayment(p.id, { payKind: k }); toast('구분을 바꿨어요.', 'ok'); refresh(); };
+  const KINDS = [['', '자동'], ['rent', '월세'], ['fee', '관리비'], ['both', '둘다']];
+  const pill = (active, label, onClick) => h('button', { style: { padding: '5px 12px', borderRadius: '999px', border: '1px solid var(--line)', fontSize: 'var(--fs-sm)', fontWeight: 700, background: active ? 'var(--primary)' : 'transparent', color: active ? '#fff' : 'var(--ink-2)', cursor: 'pointer' }, onClick }, label);
+  const kindPicker = (p) => h('div', {},
+    h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginBottom: '6px' } }, '이 입금은? ', h('span', { style: { fontWeight: 400 } }, '(자동=앱이 짐작)')),
+    h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, ...KINDS.map(([v, lbl]) => pill((p.payKind || '') === v, lbl, () => setKind(p, v)))));
+
   const payCard = (p) => h('div', { class: 'card' },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px' } },
       h('div', { style: { fontWeight: 800, fontSize: 'var(--fs-lg)' } }, `${won(p.amount)}원`),
       h('span', { class: 'chip ' + (p.source === 'bank' ? 'chip--info' : 'chip--idle'), style: { flex: 'none' } }, p.source === 'bank' ? '은행 확인' : '직접 입력')),
     h('div', { class: 'muted', style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
       `${formatMonth(p.month)}치${p.depositorName ? ' · ' + p.depositorName : ''}${p.paidAt ? ' · ' + formatDate(p.paidAt) : ''}`),
+    h('div', { style: { marginTop: '12px' } }, kindPicker(p)),
     h('div', { class: 'btn-row', style: { marginTop: '12px' } },
       h('button', { class: 'btn btn--secondary', onClick: () => toDeposit(p) }, icon('wallet', { size: 18 }), '보증금으로'),
       h('button', { class: 'btn btn--secondary', onClick: () => removePay(p) }, icon('trash', { size: 18 }), '되돌리기')),

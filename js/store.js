@@ -362,6 +362,29 @@ export async function tenantLedger(tenant, upto = monthKey()) {
 // 월세/관리비 분리 정산 (선택 구간). 관리비성 입금(수도/전기/관리비 이름·수기 관리비·그달 관리비 이하 소액)을
 // 먼저 관리비로 가려내고, 나머지를 월세로 본다. 월세를 넘게 낸 몫(합쳐 낸 관리비 포함분)은 관리비로 넘겨준다.
 // (관리비 = 관리비 + 수도세). from/to 없으면 전체 기간.
+// 입금 하나를 월세/관리비로 판단.
+//  1) 직접 정한 구분(payKind: 'rent'|'fee'|'both')이 있으면 그대로 따름 (내가 고친 것)
+//  2) 메모에 '관리비', 입금자에 '수도/전기/관리' → 관리비
+//  3) 그 달 관리비/월세/합계와 '정확히 같은 금액' → 그쪽으로 확정
+//  4) 그래도 애매하면 poolThis 로 남겨 그 달 안에서 월세부터 채움
+// 반환: { fee, rent, pool } — 이 입금이 그 달 관리비/월세로 확정된 금액과, 애매하게 남은 금액
+function classifyPayment(p, rent_m, fee_m) {
+  const a = p.amount || 0;
+  const tag = p.payKind;
+  if (tag === 'fee') return { fee: a, rent: 0, pool: 0 };
+  if (tag === 'rent') return { fee: 0, rent: a, pool: 0 };
+  if (tag === 'both') { const f = Math.min(a, fee_m); return { fee: f, rent: a - f, pool: 0 }; }
+  const kwFee = (p.source === 'manual' && /관리비/.test(p.note || '')) || /수도|전기|관리/.test(p.depositorName || '');
+  if (kwFee) return { fee: a, rent: 0, pool: 0 };
+  if (fee_m > 0 && a === fee_m) return { fee: a, rent: 0, pool: 0 };
+  if (rent_m > 0 && a === rent_m) return { fee: 0, rent: a, pool: 0 };
+  if (rent_m + fee_m > 0 && a === rent_m + fee_m) return { fee: fee_m, rent: rent_m, pool: 0 };
+  return { fee: 0, rent: 0, pool: a };
+}
+
+// 월세/관리비를 나눠서 얼마 청구·받음·부족인지, 어느 달을 빼먹었는지 계산.
+// 방식: (1) 그 달 입금은 그 달 것부터 메꾼다  (2) 넘친 몫만 오래된 미납부터 이월한다.
+//  → 몰아서 낸 달(밀렸다 한꺼번에 낸 것)도, 그 달에 낸 관리비도 제대로 잡힘.
 export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = monthKey() } = {}) {
   const base = tenant.rentHistory?.[0]?.from || tenant.contractStart;
   const startBase = (tenant.trackStart && base && compareMonth(tenant.trackStart, base) > 0) ? tenant.trackStart : base;
@@ -369,42 +392,39 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
   const endCap = moved && compareMonth(moved, upto) < 0 ? moved : upto;
   const rangeStart = (from && compareMonth(from, startBase) > 0) ? from : startBase;
   const rangeEnd = (to && compareMonth(to, endCap) < 0) ? to : endCap;
-  // 청구 합계
+
+  const byMonth = new Map();
+  const pays = (await getAllPaymentsForTenant(tenant.id)).filter((p) => compareMonth(p.month, rangeStart) >= 0 && compareMonth(p.month, rangeEnd) <= 0);
+  for (const p of pays) { if (!byMonth.has(p.month)) byMonth.set(p.month, []); byMonth.get(p.month).push(p); }
+
   let rentDue = 0, feeDue = 0, m = rangeStart, guard = 0;
+  const rows = [];
   while (rangeStart && compareMonth(m, rangeEnd) <= 0 && guard++ < 800) {
     const r = ratesForMonth(tenant, m);
-    rentDue += r.rent; feeDue += (r.fee || 0) + (r.water || 0);
+    const rent_m = r.rent || 0, fee_m = (r.fee || 0) + (r.water || 0);
+    rentDue += rent_m; feeDue += fee_m;
+    let feeGot = 0, rentGot = 0, pool = 0;
+    for (const p of (byMonth.get(m) || [])) { const c = classifyPayment(p, rent_m, fee_m); feeGot += c.fee; rentGot += c.rent; pool += c.pool; }
+    // 그 달 것부터 메꾸기
+    let rentCover = Math.min(rent_m, rentGot), rentExtra = rentGot - rentCover;
+    let feeCover = Math.min(fee_m, feeGot), feeExtra = feeGot - feeCover;
+    let rentRem = rent_m - rentCover, feeRem = fee_m - feeCover;
+    const toRent = Math.min(pool, rentRem); rentCover += toRent; pool -= toRent; rentRem -= toRent;
+    const toFee = Math.min(pool, feeRem); feeCover += toFee; pool -= toFee; feeRem -= toFee;
+    rows.push({ month: m, rentRem, feeRem, rentExtra: rentExtra + pool, feeExtra });
     m = addMonths(m, 1);
   }
-  // 입금 분류
-  const pays = (await getAllPaymentsForTenant(tenant.id)).filter((p) => compareMonth(p.month, rangeStart) >= 0 && compareMonth(p.month, rangeEnd) <= 0);
-  let feeDirect = 0, other = 0;
-  for (const p of pays) {
-    const r = ratesForMonth(tenant, p.month);
-    const fee = (r.fee || 0) + (r.water || 0);
-    const isFee = (p.source === 'manual' && /관리비/.test(p.note || '')) || /수도|전기|관리/.test(p.depositorName || '') || (fee > 0 && p.amount <= fee * 1.2);
-    if (isFee) feeDirect += p.amount; else other += p.amount;
-  }
-  const rentPaid = Math.min(rentDue, other);
-  const rentOver = Math.max(0, other - rentDue);   // 월세 넘게 낸 몫(합쳐 낸 관리비 포함) → 관리비로
-  const feePaid = feeDirect + rentOver;
-  // 관리비를 어느 달에 빼먹었는지: 낸 관리비를 관리비 부과된 달에 오래된 순으로 채우고, 남은 달을 미납으로.
-  let pool = feePaid, mm = rangeStart, g2 = 0;
-  const feeMissed = [];
-  while (rangeStart && compareMonth(mm, rangeEnd) <= 0 && g2++ < 800) {
-    const fee = (() => { const r = ratesForMonth(tenant, mm); return (r.fee || 0) + (r.water || 0); })();
-    if (fee > 0) { const cov = Math.min(pool, fee); pool -= cov; if (fee - cov > 0) feeMissed.push({ month: mm, short: fee - cov }); }
-    mm = addMonths(mm, 1);
-  }
-  // 월세를 어느 달에 빼먹었는지: 월세성 입금(other)을 월세 부과된 달에 오래된 순으로 채우고, 남은 달을 미납으로.
-  let rpool = other, rn = rangeStart, g3 = 0;
-  const rentMissed = [];
-  while (rangeStart && compareMonth(rn, rangeEnd) <= 0 && g3++ < 800) {
-    const rent = ratesForMonth(tenant, rn).rent || 0;
-    if (rent > 0) { const cov = Math.min(rpool, rent); rpool -= cov; if (rent - cov > 0) rentMissed.push({ month: rn, short: rent - cov }); }
-    rn = addMonths(rn, 1);
-  }
-  return { rentDue, feeDue, rentPaid, feePaid, feeMissed, rentMissed };
+  // 넘친 몫을 오래된 미납부터 이월
+  let rentPool = rows.reduce((s, r) => s + r.rentExtra, 0);
+  for (const r of rows) { if (rentPool <= 0) break; if (r.rentRem > 0) { const c = Math.min(rentPool, r.rentRem); r.rentRem -= c; rentPool -= c; } }
+  let feePool = rows.reduce((s, r) => s + r.feeExtra, 0);
+  for (const r of rows) { if (feePool <= 0) break; if (r.feeRem > 0) { const c = Math.min(feePool, r.feeRem); r.feeRem -= c; feePool -= c; } }
+
+  const rentMissed = rows.filter((r) => r.rentRem > 0).map((r) => ({ month: r.month, short: r.rentRem }));
+  const feeMissed = rows.filter((r) => r.feeRem > 0).map((r) => ({ month: r.month, short: r.feeRem }));
+  const rentShort = rentMissed.reduce((s, x) => s + x.short, 0);
+  const feeShort = feeMissed.reduce((s, x) => s + x.short, 0);
+  return { rentDue, feeDue, rentPaid: rentDue - rentShort, feePaid: feeDue - feeShort, feeMissed, rentMissed };
 }
 
 // upto까지 밀린 횟수(선납 이월 반영). 완납 못한 달 수.
