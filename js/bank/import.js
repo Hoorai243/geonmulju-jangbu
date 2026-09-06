@@ -31,6 +31,15 @@ export function parseBankDate(v) {
   return '';
 }
 
+/* ---------- 거래 시각(같은 날 같은 금액 구분용) ---------- */
+export function parseBankTime(...cells) {
+  for (const c of cells) {
+    const m = String(c || '').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return `${pad2(+m[1])}:${m[2]}${m[3] ? ':' + m[3] : ''}`;
+  }
+  return '';
+}
+
 /* ---------- 열 이름 규칙 ---------- */
 const KW = {
   date: /(거래).*(일)|일자|날짜|거래일시|거래일/,
@@ -39,6 +48,7 @@ const KW = {
   state: /입.?출.?금|거래구분|구분|상태|종류|유형/,
   amt: /거래금액|거래액|금액/,        // 단일 금액 열(상태 열과 함께)
   name: /적요|내용|보내는|보내신분|의뢰인|받는분|받는사람|기재|거래기록|메모|상대방|비고|이름/,
+  time: /처리시각|거래시간|처리시간|시각/,   // 같은 날 여러 건 구분용(선택)
 };
 const matchKW = (cell, re) => re.test(String(cell || '').replace(/\s+/g, ''));
 
@@ -60,7 +70,7 @@ function findHeader(rows) {
 }
 
 function detectCols(header) {
-  const col = { date: -1, din: -1, dout: -1, state: -1, amt: -1, name: -1 };
+  const col = { date: -1, din: -1, dout: -1, state: -1, amt: -1, name: -1, time: -1 };
   header.forEach((cell, i) => {
     const isDin = matchKW(cell, KW.din), isDout = matchKW(cell, KW.dout);
     if (col.date < 0 && matchKW(cell, KW.date)) col.date = i;
@@ -69,6 +79,7 @@ function detectCols(header) {
     if (col.state < 0 && matchKW(cell, KW.state) && !isDin && !isDout) col.state = i;
     if (col.amt < 0 && matchKW(cell, KW.amt) && !isDin && !isDout) col.amt = i;
     if (col.name < 0 && matchKW(cell, KW.name)) col.name = i;
+    if (col.time < 0 && matchKW(cell, KW.time)) col.time = i;
   });
   return col;
 }
@@ -89,7 +100,8 @@ function parseHeaderless(rows) {
     const date = parseBankDate(String(r[0]).split(/\s+/)[0]);
     const name = String(r[4] || '').trim() || String(r[11] || '').trim(); // 적요
     if (!date) continue;
-    out.push({ date, name, amount });
+    const time = parseBankTime(r[0], r[8]); // 날짜칸 안의 시각 또는 처리시각열(8)
+    out.push({ date, name, amount, time });
   }
   return out.length ? out : null;
 }
@@ -120,7 +132,8 @@ function parseGeneric(rows) {
     const date = parseBankDate(r[col.date]);
     const name = col.name >= 0 ? String(r[col.name] || '').trim() : '';
     if (!date) continue;
-    out.push({ date, name, amount });
+    const time = parseBankTime(col.time >= 0 ? r[col.time] : '', r[col.date]); // 시각열 → 없으면 날짜칸 안의 시각
+    out.push({ date, name, amount, time });
   }
   return out;
 }

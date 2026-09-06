@@ -68,7 +68,10 @@ export async function renderBankImport() {
     // 보증금으로 옮긴 은행 입금도 '이미 있음'으로 본다(안 그러면 재불러올 때 또 뜸)
     const bankDeposits = await store.getBankDepositsForBuilding(buildingId);
     const depName = (l) => { const parts = String(l.memo || '').split('·'); return parts.length > 1 ? norm(parts[parts.length - 1]) : ''; };
-    const isDup = (t) => existing.some((p) => p.paidAt === t.date && p.amount === t.amount && norm(p.depositorName) === norm(t.name))
+    // 중복 판정: 날짜+금액+이름이 같아야 함. 거래 시각이 둘 다 있으면 시각까지 같아야 중복
+    // (같은 날 같은 금액이라도 시각이 다르면 서로 다른 거래 — 예: 2달치 한 번에 낸 경우).
+    const isDup = (t) => existing.some((p) => p.paidAt === t.date && p.amount === t.amount && norm(p.depositorName) === norm(t.name)
+      && (!t.time || !p.txTime || p.txTime === t.time))
       || bankDeposits.some((l) => l.date === t.date && l.amount === t.amount && (!depName(l) || depName(l) === norm(t.name)));
     const rules = await store.getMatchRules(buildingId);
     let acctId = accounts.length === 1 ? accounts[0].id : '';
@@ -150,7 +153,7 @@ export async function renderBankImport() {
           if (p.asDeposit) {
             await store.addLedger({ tenantId: p.tenantId, type: 'in', amount: p.t.amount, date: p.t.date, memo: '은행파일' + (p.t.name ? ' · ' + p.t.name : ''), accountId: acctId || null, source: 'bank' });
           } else {
-            await store.addPayment({ buildingId, tenantId: p.tenantId, month: p.t.date.slice(0, 7), amount: p.t.amount, depositorName: p.t.name, paidAt: p.t.date, source: 'bank', note: '은행파일', accountId: acctId || null });
+            await store.addPayment({ buildingId, tenantId: p.tenantId, month: p.t.date.slice(0, 7), amount: p.t.amount, depositorName: p.t.name, paidAt: p.t.date, source: 'bank', note: '은행파일', accountId: acctId || null, txTime: p.t.time || '' });
           }
           saved++;
         }
@@ -208,7 +211,7 @@ export async function renderBankImport() {
         h('table', { class: 'table', style: { fontSize: 'var(--fs-sm)' } },
           h('thead', {}, h('tr', {}, h('th', {}, '입금일'), h('th', { class: 'num' }, '금액'), h('th', {}, '넣을 곳'))),
           h('tbody', {}, ...allTx.map(({ t, dup }) => h('tr', dup ? { style: { opacity: '.5' } } : {},
-            h('td', {}, t.date),
+            h('td', { style: { whiteSpace: 'nowrap' } }, t.date + (t.time ? ' ' + t.time : '')),
             h('td', { class: 'num' }, won(t.amount) + '원'),
             h('td', {}, dup ? h('span', { style: { fontSize: '0.85em', color: 'var(--ink-3)' } }, '이미 있음') : rowSelect(t)))))));
       const detailBtn = h('button', { class: 'btn btn--ghost', style: { minHeight: '40px', fontSize: 'var(--fs-sm)', marginTop: '6px' } }, `자세히 보기 (${allTx.length}건) ▾`);

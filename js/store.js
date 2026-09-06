@@ -243,12 +243,13 @@ export async function getAllPaymentsForTenant(tenantId) {
   const list = await db.getBy('payment_log', 'byTenant', tenantId);
   return list.sort((a, b) => (a.month === b.month ? (a.paidAt < b.paidAt ? -1 : 1) : compareMonth(a.month, b.month)));
 }
-export async function addPayment({ buildingId, tenantId, month, amount, depositorName, source = 'manual', paidAt, note, accountId }) {
+export async function addPayment({ buildingId, tenantId, month, amount, depositorName, source = 'manual', paidAt, note, accountId, txTime }) {
   const rec = {
     id: uid(), buildingId, tenantId: tenantId || null, month: month || monthKey(),
     amount: Number(amount) || 0, depositorName: depositorName || '',
     source, paidAt: paidAt || todayISO(), note: note || '', accountId: accountId || null, createdAt: new Date().toISOString(),
   };
+  if (txTime) rec.txTime = txTime; // 은행 거래 시각(같은 날 같은 금액 구분용)
   await db.put('payment_log', rec);
   return rec;
 }
@@ -349,22 +350,28 @@ export async function tenantLedger(tenant, upto = monthKey()) {
   for (const p of pays) byMonth[p.month] = (byMonth[p.month] || 0) + (Number(p.amount) || 0);
   const map = new Map();
   const today = todayISO();
-  let credit = 0, net = 0, m = start, guard = 0;
+  // 선납(앞으로)·후납(뒤로) 둘 다 반영: 전체 낸 돈을 오래된 달부터 채운다.
+  // 이러면 밀렸다가 나중에 몰아 낸 달도 '완납'으로 잡히고, 미리 낸 돈은 다음 달을 덮는다.
+  let net = 0, m = start, guard = 0;
+  let pool = 0;                          // 전체 납부액 풀
+  while (start && compareMonth(m, end) <= 0 && guard++ < 800) { pool += (byMonth[m] || 0); m = addMonths(m, 1); }
+  const totalPool = pool;
+  m = start; guard = 0;
   while (start && compareMonth(m, end) <= 0 && guard++ < 800) {
     const due = ratesForMonth(tenant, m).total;
     const paid = byMonth[m] || 0;
-    const avail = credit + paid;         // 이월된 선납 + 이 달 입금
-    let state;
-    if (due <= 0) state = paid > 0 ? 'ok' : 'idle';
-    else if (avail >= due) state = 'ok';
-    else if (avail > 0) state = 'part';
-    else state = isOverdue(tenant, m, today) ? 'bad' : 'idle';
-    map.set(m, { state, due, paid, avail, remaining: due > 0 ? Math.max(0, due - avail) : 0, carried: due > 0 && paid < due && avail >= due });
-    credit = Math.max(0, avail - due);   // 남은 선납 다음 달로 이월
-    net += paid - due;                   // 전체 순액(+선납 / -밀림)
+    let state, cov = 0;
+    if (due <= 0) { state = paid > 0 ? 'ok' : 'idle'; }
+    else {
+      cov = Math.min(pool, due); pool -= cov;   // 오래된 달부터 채움(후납·선납 모두 반영)
+      state = cov >= due ? 'ok' : cov > 0 ? 'part' : (isOverdue(tenant, m, today) ? 'bad' : 'idle');
+    }
+    map.set(m, { state, due, paid, avail: cov, remaining: due > 0 ? Math.max(0, due - cov) : 0, carried: due > 0 && paid < due && cov >= due });
+    net += paid - due;
     m = addMonths(m, 1);
   }
-  return { map, net, credit };
+  const credit = Math.max(0, pool);      // 다 채우고 남은 선납
+  return { map, net, credit, totalPool };
 }
 
 // 월세/관리비 분리 정산 (선택 구간). 관리비성 입금(수도/전기/관리비 이름·수기 관리비·그달 관리비 이하 소액)을
