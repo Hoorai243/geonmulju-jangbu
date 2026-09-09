@@ -43,8 +43,6 @@ function loadExcelJS() {
 
 /* ================= 데이터 준비 ================= */
 // 세입자 1명: 계약 시작월 ~ (현재 또는 퇴거월) 월별 입금내역
-const srcTag = (p) => (p.source === 'bank' ? ' (은행)' : ' (직접)');
-
 async function tenantReport(t, { bankOnly = false } = {}) {
   const base = t.rentHistory?.[0]?.from || t.contractStart;
   // 장부 시작월(trackStart)이 있으면 그 달부터 — 요약/원장과 같은 범위로 맞춰 초과/부족이 어긋나지 않게
@@ -511,7 +509,8 @@ async function summaryReport(t, { from = '', to = '' } = {}) {
   { let pool = months.reduce((sum, mm) => sum + (map.get(mm)?.paid || 0), 0);
     for (const mm of months) { const s = map.get(mm); if (s.due <= 0) { netState.set(mm, s.paid > 0 ? 'ok' : 'idle'); continue; } const cov = Math.min(pool, s.due); pool -= cov; netState.set(mm, cov >= s.due ? 'ok' : cov > 0 ? 'part' : s.state); } }
   let totalDue = 0, totalPaid = 0, lateCount = 0, running = 0; const rows = [];
-  for (const m of months) { const s = map.get(m); const ns = netState.get(m) || s.state; totalDue += s.due; totalPaid += s.paid; if (s.due > 0 && ns !== 'ok') lateCount++; running += s.paid - s.due; rows.push({ m, due: s.due, paid: s.paid, state: ns, running }); }
+  const nowM = monthKey();
+  for (const m of months) { const s = map.get(m); const ns = netState.get(m) || s.state; totalDue += s.due; totalPaid += s.paid; if (s.due > 0 && (ns === 'bad' || ns === 'part') && m !== nowM) lateCount++; running += s.paid - s.due; rows.push({ m, due: s.due, paid: s.paid, state: ns, running }); }
   const filtered = !!(from || to);
   return { t, rows, totalDue, totalPaid, diff: totalPaid - totalDue, lateCount, filtered, periodLabel: filtered ? `${from || '처음'}~${to || '지금'}` : '전체기간' };
 }

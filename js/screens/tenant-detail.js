@@ -362,7 +362,9 @@ export async function renderTenantSummary({ params, query = {} }) {
     const s = map.get(m);
     totalDue += s.due; totalPaid += s.paid;
     const ns = netState.get(m) || s.state;
-    if (s.due > 0 && ns !== 'ok') lateCount++;
+    // 미납(빨강)·부분(노랑)만 '완납 못한 달'로 센다. 미확인(회색)과 진행 중인 이번 달(현재월)은 제외
+    // (세입자 상세의 '밀림 횟수'와 같은 기준 — 두 화면 숫자가 어긋나지 않게).
+    if (s.due > 0 && (ns === 'bad' || ns === 'part') && m !== monthKey()) lateCount++;
     running += s.paid - s.due;   // 선택한 구간 안에서의 누적
     return { m, s, running, ns };
   });
