@@ -340,16 +340,19 @@ export async function lateCount(tenant, uptoMonth = monthKey()) {
 // 선납/후납 반영 정산 — 넘치게 낸 달의 돈이 다음 달로 이월되고,
 // 전체 순액(net: +선납 / -밀림)도 계산. upto 달까지.
 export async function tenantLedger(tenant, upto = monthKey()) {
+  const pays = await getAllPaymentsForTenant(tenant.id);
+  return computeLedger(tenant, pays, upto);
+}
+// 순수 계산부(테스트용). 입금 목록을 인자로 받아 저장소 접근 없이 계산한다.
+export function computeLedger(tenant, pays, upto = monthKey(), today = todayISO()) {
   const base = tenant.rentHistory?.[0]?.from || tenant.contractStart;
   // 장부 시작월(trackStart)이 있으면 그 달부터만 센다(계약보다 뒤일 때만 — 앞이면 요금이 없어 의미 없음).
   const start = (tenant.trackStart && base && compareMonth(tenant.trackStart, base) > 0) ? tenant.trackStart : base;
   const moved = tenant.status === 'movedout' && tenant.movedOutAt ? monthKey(new Date(tenant.movedOutAt)) : null;
   const end = moved && compareMonth(moved, upto) < 0 ? moved : upto;
-  const pays = await getAllPaymentsForTenant(tenant.id);
   const byMonth = {};
   for (const p of pays) byMonth[p.month] = (byMonth[p.month] || 0) + (Number(p.amount) || 0);
   const map = new Map();
-  const today = todayISO();
   // 전진 이월(선납): 그 달 입금 + 지난 선납으로 그 달을 채운다. "이번 달 냈나"를 정확히 보여줌.
   // (후납=밀렸다 나중에 갚음은 대시보드가 아니라 '납부 요약'에서만 따로 반영한다)
   let credit = 0, net = 0, m = start, guard = 0;
@@ -396,7 +399,12 @@ function classifyPayment(p, rent_m, fee_m) {
 // 월세/관리비를 나눠서 얼마 청구·받음·부족인지, 어느 달을 빼먹었는지 계산.
 // 방식: (1) 그 달 입금은 그 달 것부터 메꾼다  (2) 넘친 몫만 오래된 미납부터 이월한다.
 //  → 몰아서 낸 달(밀렸다 한꺼번에 낸 것)도, 그 달에 낸 관리비도 제대로 잡힘.
-export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = monthKey() } = {}) {
+export async function tenantLedgerSplit(tenant, opts = {}) {
+  const pays = await getAllPaymentsForTenant(tenant.id);
+  return computeLedgerSplit(tenant, pays, opts);
+}
+// 순수 계산부(테스트용). 입금 목록을 인자로 받아 저장소 접근 없이 계산한다.
+export function computeLedgerSplit(tenant, pays, { from = '', to = '', upto = monthKey() } = {}) {
   const base = tenant.rentHistory?.[0]?.from || tenant.contractStart;
   const startBase = (tenant.trackStart && base && compareMonth(tenant.trackStart, base) > 0) ? tenant.trackStart : base;
   const moved = tenant.status === 'movedout' && tenant.movedOutAt ? monthKey(new Date(tenant.movedOutAt)) : null;
@@ -405,8 +413,8 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
   const rangeEnd = (to && compareMonth(to, endCap) < 0) ? to : endCap;
 
   const byMonth = new Map();
-  const pays = (await getAllPaymentsForTenant(tenant.id)).filter((p) => compareMonth(p.month, rangeStart) >= 0 && compareMonth(p.month, rangeEnd) <= 0);
-  for (const p of pays) { if (!byMonth.has(p.month)) byMonth.set(p.month, []); byMonth.get(p.month).push(p); }
+  const inRange = pays.filter((p) => compareMonth(p.month, rangeStart) >= 0 && compareMonth(p.month, rangeEnd) <= 0);
+  for (const p of inRange) { if (!byMonth.has(p.month)) byMonth.set(p.month, []); byMonth.get(p.month).push(p); }
 
   let rentDue = 0, feeDue = 0, m = rangeStart, guard = 0;
   const rows = [];
@@ -446,8 +454,13 @@ export async function tenantLedgerSplit(tenant, { from = '', to = '', upto = mon
 
 // upto까지 밀린 횟수(선납 이월 반영). 완납 못한 달 수.
 export async function lateCountCarry(tenant, upto = monthKey()) {
+  const pays = await getAllPaymentsForTenant(tenant.id);
+  return computeLateCountCarry(tenant, pays, upto);
+}
+// 순수 계산부(테스트용).
+export function computeLateCountCarry(tenant, pays, upto = monthKey(), today = todayISO()) {
   const last = addMonths(upto, -1); // 이번 달은 진행 중일 수 있어 제외
-  const { map } = await tenantLedger(tenant, last);
+  const { map } = computeLedger(tenant, pays, last, today);
   const months = [...map.keys()].sort((a, b) => (a < b ? -1 : 1));
   // 후납(밀렸다 나중에 갚음)까지 반영: 전체 낸 돈을 오래된 달부터 채우고, 끝까지 못 채운 달만 센다.
   // (요약의 '완납 못한 달'과 같은 기준 — 세입자 상세의 '밀림 횟수'와 숫자가 어긋나지 않게)

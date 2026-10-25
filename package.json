@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "test": "node --test test/",
     "icons": "node icons/generate-icons.mjs",
     "start": "node scripts/dev-server.mjs",
     "build:www": "node scripts/build-www.mjs",
