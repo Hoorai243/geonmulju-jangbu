@@ -47,7 +47,10 @@ const KW = {
   dout: /출금|찾으신|보내신금/,       // 출금 금액 열
   state: /입.?출.?금|거래구분|구분|상태|종류|유형/,
   amt: /거래금액|거래액|금액/,        // 단일 금액 열(상태 열과 함께)
-  name: /적요|내용|보내는|보내신분|의뢰인|받는분|받는사람|기재|거래기록|메모|상대방|비고|이름/,
+  // 실제 입금자/상대방 이름 열(우선). 국민은행 "보낸분/받는분" 등.
+  name: /보낸분|보내는|보내신분|의뢰인|받는분|받는사람|상대방|이름/,
+  // 적요·메모류(이름 열이 없을 때만 대체로 씀). 국민은행 "적요"는 거래종류(스마트입금 등)라 이름 아님.
+  memo: /적요|송금메모|내용|기재|거래기록|메모|비고/,
   time: /처리시각|거래시간|처리시간|시각/,   // 같은 날 여러 건 구분용(선택)
 };
 const matchKW = (cell, re) => re.test(String(cell || '').replace(/\s+/g, ''));
@@ -70,7 +73,7 @@ function findHeader(rows) {
 }
 
 function detectCols(header) {
-  const col = { date: -1, din: -1, dout: -1, state: -1, amt: -1, name: -1, time: -1 };
+  const col = { date: -1, din: -1, dout: -1, state: -1, amt: -1, name: -1, memo: -1, time: -1 };
   header.forEach((cell, i) => {
     const isDin = matchKW(cell, KW.din), isDout = matchKW(cell, KW.dout);
     if (col.date < 0 && matchKW(cell, KW.date)) col.date = i;
@@ -79,6 +82,7 @@ function detectCols(header) {
     if (col.state < 0 && matchKW(cell, KW.state) && !isDin && !isDout) col.state = i;
     if (col.amt < 0 && matchKW(cell, KW.amt) && !isDin && !isDout) col.amt = i;
     if (col.name < 0 && matchKW(cell, KW.name)) col.name = i;
+    if (col.memo < 0 && matchKW(cell, KW.memo)) col.memo = i;
     if (col.time < 0 && matchKW(cell, KW.time)) col.time = i;
   });
   return col;
@@ -107,7 +111,7 @@ function parseHeaderless(rows) {
 }
 
 // 표준 파서(자동 감지): 입금 행만 → {date, name, amount}
-function parseGeneric(rows) {
+export function parseGeneric(rows) {
   const hi = findHeader(rows);
   if (hi < 0) {
     const alt = parseHeaderless(rows); // 제목 없는 형식 시도
@@ -130,7 +134,9 @@ function parseGeneric(rows) {
       if (amount <= 0) continue;
     }
     const date = parseBankDate(r[col.date]);
-    const name = col.name >= 0 ? String(r[col.name] || '').trim() : '';
+    // 이름 열 우선, 비었으면 적요·메모류로 대체(이름 열 없는 은행 포함)
+    let name = col.name >= 0 ? String(r[col.name] || '').trim() : '';
+    if (!name && col.memo >= 0) name = String(r[col.memo] || '').trim();
     if (!date) continue;
     const time = parseBankTime(col.time >= 0 ? r[col.time] : '', r[col.date]); // 시각열 → 없으면 날짜칸 안의 시각
     out.push({ date, name, amount, time });
